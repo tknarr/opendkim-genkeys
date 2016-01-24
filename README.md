@@ -1,4 +1,4 @@
-# PyAuth
+# OpenDKIM genkeys tool
 
 Copyright 2016 Todd T Knarr &lt;<tknarr@silverglass.org>&gt;
 
