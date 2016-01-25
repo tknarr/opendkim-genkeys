@@ -16,6 +16,8 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# Uses the 'requests' package.
+
 # Requires:
 # dnsapi_data][0]       : Cookie value for dns_cookie for freedns.afraid.org from browser
 # dnsapi_domain_data[0] : domain_id value for domain
@@ -34,13 +36,13 @@
 # type=TXT&subdomain=test&domain_id=939393&address=Some+data&ttl=&ref=xxxxxxxxxxxxxxxx&send=Save%21
 #
 # Parameters (will be URL-encoded):
-#   type = TXT
+#   type = "TXT"
 #   subdomain = selector + "._domainkey"
 #   domain_id = dnsapi_domain_data[0]
 #   address = key_data['chunked']
 #   ttl = empty
 #   ref = unknown, apparently not used
-#   send = 'Save!'
+#   send = "Save!"
 
 import logging
 import requests
@@ -73,8 +75,7 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
                                    'send': "Save!"
                                    },
                           cookies = { 'dns_cookie': cookie_value } )
-    logging.info( "Status code: %d", resp.status_code )
-    logging.info( "Body: %s", resp.text )
+    logging.info( "HTTP status: %d", resp.status_code )
 
     if resp.status_code == requests.codes.ok:
         result = True
