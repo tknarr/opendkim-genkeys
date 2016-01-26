@@ -51,8 +51,8 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     except KeyError as e:
         logging.error( "DNS API linode: required information not present: %s", str(e) )
         return False
-    #if debugging:
-    #    return True
+    if debugging:
+        return True
 
     result = False
     resp = requests.post( "https://api.linode.com/",
