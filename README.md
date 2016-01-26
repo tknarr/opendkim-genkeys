@@ -107,7 +107,3 @@ a rigorous monthly key rotation schedule.
 If you want to set your own selector values, say if management dictates or you need to rotate
 keys more often than every month, you can pass a selector value as a command-line parameter.
 `genkeys.py` will use that value as the selector instead of generating one.
-
-# Writing a new DNS API modules
-
-_TODO_
