@@ -1,6 +1,6 @@
 # OpenDKIM genkeys tool
 
-Copyright 2016 Todd T Knarr &lt;<tknarr@silverglass.org>&gt;
+Copyright &copy; 2016 Todd T Knarr &lt;<tknarr@silverglass.org>&gt;
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -47,21 +47,88 @@ NOT_ push the button." is a good rule to live by).
 
 ### `dnsapi.ini`
 
-_TODO_
+This file defines the global information needed by all domains hosted somewhere that uses
+a given API to allow programmatic updating of DNS records. There's one line per API with
+fields within the line separated by whitespace. The first field is always the name of the
+API. Following that will be fields containing any data needed by the API that isn't specific
+to a particular domain, eg. account authentication keys. If you look at the example file
+provided with the scripts, it contains comments describing the setup for the two supported
+APIs, `freedns` and `linode`, along with the `null` API used for debugging. Blank lines are
+ignored, as are lines which start with a `#` character (comment lines).
+
+A DNS API with a particular name is supported by a module in a file named `dnsapi_X.py`,
+where the X is replaced with the name in the first field of the API's line in `dnsapi.ini`.
+The names are arbitrary but should be mnemonic, and they aren't hardcoded into the main
+script in any way. Additional APIs can be supported merely by creating a `dnsapi_X.py` module
+for them and adding an entry to `dnsapi.ini`, the main script will automatically load the
+module as needed. Writing these scripts is beyond the scope of this document, you can find
+information on the process in the wiki's
+[Writing a new DNS API module](https://github.com/tknarr/opendkim-genkeys/wiki/Writing-a-new-DNS-API-module)
+page.
 
 ### `domains.ini`
 
-_TODO_
+This file is the main one that ties domains, key files and DNS APIs together. As with `dnsapi.ini`,
+blank lines and lines beginning with `#` are ignored. The first field in each line is the
+domain name, the second field is the name identifying the key to be used for that domain, and
+the third field if present is the name of the DNS API used by the provider hosting that domain's
+DNS. Additional fields may be present after the third containing data specific to that domain's
+DNS data needed by the API, eg. domain identifiers telling the provider which of your domains
+that particular record is to be added to. Specific details about these fields and how to obtain
+the data can be found in the wiki in the provider's entry on the
+[DNS APIs page](https://github.com/tknarr/opendkim-genkeys/wiki/DNS-APIs). If no DNS API name is
+present, the script won't attempt to automatically update the DNS information and you'll need to
+take the information from the generated public key file and update the DNS data manually. If a
+DNS API name is present (and the information in `dnsapi.ini` and `domains.ini` is all correct),
+the script will use the API to add the new DKIM record automatically (you can suppress this via
+the `--no-dns` option).
 
 # Generated files
 
 ## Private and public key files
 
-_TODO_
+Both types of files follow the same pattern for the base filename: the key name, a dot and
+the selector value. Private key files have the suffix `.key` and are uploaded to the mail
+server to be used for signing outgoing messages. Public key data files have the suffix `.txt`
+and contain the text needed in the body of the DKIM DNS TXT record to allow receiving mail
+servers to verify the DKIM signature. Private key files are a base64-encoded RSA private key
+file (familiar if you've worked with SSL or X.509). The public key data files are also
+mostly base64-encoded data, broken up into chunks of less than 255 characters (because of
+limitations in the size of the UDP packets most commonly used by DNS) and with each chunk
+enclosed in quote marks. That's the format BIND zone files want the data in. Depending on
+your DNS software or DNS hosting provider, you may need to reformat the text. Linode, for
+example, requires that you remove the quote marks and intervening whitespace, turning the
+data into a single long string before putting it in the record's value field. There are too
+many possible variations to cover here, if your DNS hosting provider's not supported by a
+DNS API module or you need to update DNS software directly you'll need to research what format
+is required and look over the `.txt` files to see what you need to do with the data.
 
 ## Updated `opendkim` daemon configuration files
 
-_TODO_
+OpenDKIM uses two configuration files to control what keys are used to sign outgoing
+messages: `signing.table` and `key.table`. `signing.table` is the simplest one, the first
+field is a pattern matching email addresses (usually `*@domain` to match all addresses
+in a given domain) and the second field is a tag used to determine what key entry will
+be used to sign messages matching the first field's pattern. The tag is arbitrary, this
+script generates one based on the domain name.
+
+`key.table` has one entry per tag mentioned in `signing.table`. The first field is the
+tag, the second is a colon-delimited set of information: a domain name, a selector value
+and the name of a key file to use for signing. Note that the domain doesn't have to be
+the domain of the email sender, it's simply the domain under which DKIM public keys for
+signature validation will be looked up. This script configures things so that the DKIM
+public keys will be under the domain the email is from. The key files in the final field
+will be located in `/etc/opendkim/keys`, the standard location, and follow the pattern of
+the key name, a dot, the selector value and the suffix `.key`.
+
+The script completely regenerates these two files based on the information in `domains.ini`
+and the selector value (whether auto-generated or supplied), so once the private keys are
+uploaded to `/etc/opendkim/keys` you can just upload the new `signing.table` and `key.table`
+files to `/etc/opendkim` and restart the OpenDKIM daemon to begin using the new keys for
+outgoing mail.
+
+Neither of these files affects checking of incoming mail, that's done based on the domain
+and selector information the sender's DKIM software put into the signature header.
 
 # Standard installation and workflow
 
