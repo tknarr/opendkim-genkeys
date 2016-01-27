@@ -15,6 +15,28 @@ LICENSE.md) for more details.
 You should have received a copy of the GNU General Public License along with
 this program. If not, see [http://www.gnu.org/licenses/](http://www.gnu.org/licenses/)
 
+## Summary
+
+A tool to help with the generation of DKIM keys for use with OpenDKIM. The standard
+`opendkim-genkey` tool is awkward to use, it only generates key data for a single
+domain at a time and the file for the public key part that needs populated into the
+DNS data, while exactly what's needed for use with BIND, isn't in a format usable by
+the web-based interfaces to most DNS hosting providers. It also requires manually
+updating the DNS information, a significant task when dealing with the common situation
+of multiple domains. This awkwardness occurs repeatedly, since the recommendation for
+DKIM is that keys be rotated (new keys generated and old keys retired) every month.
+
+This tool takes a configuration detailing all the domains that need keys and generates
+all the keys in a single operation, and for supported DNS hosting provider APIs will
+automatically add the new keys to DNS for you. In the process it'll regenerate the two
+configuration files OpenDKIM needs that depend on the set of domains and keys involved
+and leave you with reasonably clean `.txt` files containing the DNS information for
+each domain. File names follow a format that should eliminate overwriting of files
+unless you deliberately ask for that.
+
+You will need to be familiar with DKIM and have at least a general familiarity with the
+OpenDKIM package before using this tool.
+
 ## Usage
 
     genkeys.py [-h] [-n] [-v] [--no-dns] [selector]
@@ -82,6 +104,11 @@ take the information from the generated public key file and update the DNS data 
 DNS API name is present (and the information in `dnsapi.ini` and `domains.ini` is all correct),
 the script will use the API to add the new DKIM record automatically (you can suppress this via
 the `--no-dns` option).
+
+When selecting key names for each domain, recommended practice is to use a short form of the domain
+name or something mnemonic for a group of related domains. Good practice is that you shouldn't use
+the same key across many domains, but closely-related domains (eg. `example.com` and `example.net`
+when they're just synonyms for each other) might both reasonably use key `example`.
 
 # Generated files
 
