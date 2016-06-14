@@ -45,6 +45,7 @@ OpenDKIM package before using this tool.
 *   `-n` : use next month instead of this month when automatically generating a selector
 *   `-v` : log additional informational messages while processing
 *   `--no-dns` : do not attempt to automatically update DNS records
+*   `--selector` : output the selector and do nothing else
 
 If no `selector` is specified, one will be automatically generated based on the current
 month (or the next month if `-n` was used). Standard practice would be to omit the
@@ -55,6 +56,12 @@ than the current one. If `--no-dns` is used you'll have to manually update the D
 records with the data in the generated `.txt` files, otherwise the script will try
 to automatically update the DNS records for all domains it's got DNS API support and
 information for.
+
+The `--selector` option can be used to cause the tool to output the generated selector
+on standard output for capture by a script. The `-n` option can be used in conjunction
+with `--selector`, other options will have no effect when `--selector` is specified.
+This is to assist with scripts to automatically upload the generated data files to a
+server for installation.
 
 The following options are also available for development and debugging. They should
 not be used under normal circumstances ("If you don't know what it's going to do, _DO

@@ -206,6 +206,8 @@ parser.add_argument( "--debug", dest = 'log_debug', action = 'store_true',
                      help = "Log debugging info and do not update DNS" )
 parser.add_argument( "--use-null", dest = 'use_null_dnsapi', action = 'store_true',
                      help = "Silently use the null DNS API instead of the real API" )
+parser.add_argument( "--selector", dest='output_selector', action = 'store_true',
+                     help = "Causes the generated selector to be output" )
 parser.add_argument( "selector", nargs = '?', default = None, help = "Selector to use" )
 args = parser.parse_args()
 
@@ -215,11 +217,36 @@ else:
     level = logging.WARN
 if args.log_debug:
     level = logging.DEBUG
-logging.basicConfig( level = level, format = "%(levelname)s: %(message)s" )
 
 should_update_dns = args.update_dns
 if never_update_dns:
     should_update_dns = False
+
+should_output_selector = args.output_selector
+if should_output_selector:
+    should_update_dns = False
+    level = logging.ERROR
+
+logging.basicConfig( level = level, format = "%(levelname)s: %(message)s" )
+
+# If we weren't given an explicit selector, the default is YYYYMM based on
+# either this month or next month.
+selector = args.selector
+if selector == None:
+    selector_date = datetime.date.today().replace( day = 1 )
+    if args.next_month:
+        y = selector_date.year
+        m = selector_date.month
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+        selector_date = selector_date.replace( year = y, month = m )
+    selector = selector_date.strftime( "%Y%m" )
+logging.info( "Selector: %s", selector )
+if should_output_selector:
+    print selector
+    sys.exit( 0 )
 
 # Process dnsapi.ini
 # If we're supposed to update DNS records but don't have any definitions for
@@ -245,22 +272,6 @@ key_names = []
 for item in domain_data:
     if item[1] not in key_names:
         key_names.append( item[1] )
-
-# If we weren't given an explicit selector, the default is YYYYMM based on
-# either this month or next month.
-selector = args.selector
-if selector == None:
-    selector_date = datetime.date.today().replace( day = 1 )
-    if args.next_month:
-        y = selector_date.year
-        m = selector_date.month
-        m += 1
-        if m > 12:
-            m = 1
-            y += 1
-        selector_date = selector_date.replace( year = y, month = m )
-    selector = selector_date.strftime( "%Y%m" )
-logging.info( "Selector: %s", selector )
 
 # Generate our keys, one per key name
 keys = {} # Key = key name (field 1) from domain_data[n], Value = key data dict
