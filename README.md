@@ -1,5 +1,7 @@
 # OpenDKIM genkeys tool
 
+[![Latest GitHub release](https://img.shields.io/github/release/tknarr/PyAuth.png)](https://github.com/tknarr/PyAuth/releases/latest)
+
 Copyright &copy; 2016 Todd T Knarr &lt;<tknarr@silverglass.org>&gt;
 
 This program is free software: you can redistribute it and/or modify it under
