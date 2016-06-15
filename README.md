@@ -1,6 +1,6 @@
 # OpenDKIM genkeys tool
 
-[![Latest GitHub release](https://img.shields.io/github/release/tknarr/PyAuth.png)](https://github.com/tknarr/PyAuth/releases/latest)
+[![Latest GitHub release](https://img.shields.io/github/release/tknarr/opendkim-genkeys.png)](https://github.com/tknarr/opendkim-genkeys/releases/latest)
 
 Copyright &copy; 2016 Todd T Knarr &lt;<tknarr@silverglass.org>&gt;
 
