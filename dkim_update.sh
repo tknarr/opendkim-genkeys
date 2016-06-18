@@ -16,11 +16,16 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# This script gets run from the OpenDKIM user's crontab at a time after new
-# key files are uploaded.
+# This script gets run from root's crontab at a time after new key files
+# are uploaded.
 
 # Replace with the location DKIM files are uploaded to
 SRC_DIR=/upload/location
+
+# Edit this with the user and group name used by the OpenDKIM software
+# if necessary.
+DKIM_USER=opendkim
+DKIM_GROUP=opendkim
 
 # Edit if needed for the actual location of OpenDKIM's configuration directory
 cd /etc/opendkim
@@ -39,6 +44,7 @@ do
     if [ -f $x ]
     then
         cp $x keys/ || exit 1
+        chown ${DKIM_USER}:${DKIM_GROUP} $x || exit 1
         chmod u=rw,go= $x || exit 1
     fi
 done
@@ -57,6 +63,7 @@ do
     if [ -f $x ]
     then
         cp $x ./ || exit 1
+        chown ${DKIM_USER}:${DKIM_GROUP} $x || exit 1
         chmod u=rw,go=r $x || exit 1
     fi
 done
@@ -65,5 +72,7 @@ done
 rm -f ${SRC_DIR}/*.key ${SRC_DIR}/*.table ${SRC_DIR}/.uploaded || exit 1
 
 echo "DKIM key update completed successfully."
+
+systemctl restart opendkim
 
 exit 0

@@ -42,6 +42,7 @@ OpenDKIM package before using this tool.
 ## Usage
 
     genkeys.py [-h] [-n] [-v] [--no-dns] [selector]
+    genkeys.py [-n] --selector [selector]
 
 *   `-h` : display help
 *   `-n` : use next month instead of this month when automatically generating a selector
@@ -210,3 +211,88 @@ a rigorous monthly key rotation schedule.
 If you want to set your own selector values, say if management dictates or you need to rotate
 keys more often than every month, you can pass a selector value as a command-line parameter.
 `genkeys.py` will use that value as the selector instead of generating one.
+
+## Automation scripts
+
+### `dkim_rotation.sh`
+
+This script runs on the system where you generate new DKIM keys. It generates new keys
+and then uploads them to a staging location on the mail servers. Normally it's run
+from crontab as a normal user, either on a day late in the month (to prepare keys for
+the next month) or early in the AM on the first of the month. I recommend running the
+script towards the end of the month to prepare for the next month, this gives time to
+check the results and catch any problems that might crop up. An example crontab entry
+would be:
+
+    31 8 25 * * /usr/local/sbin/dkim_rotation.sh
+
+This runs the script at 8:30am on the 25th of the month. That gives you between 3 and
+6 days to check the results before they are applied.
+
+To prepare the script for your installation you need to edit a few bits of data to
+reflect the users and directories on your systems.
+
+    GENKEY="genkeys.py -n"
+
+Edit this line to include the path to `genkeys.py` if it's not in the PATH of the
+user the script. If you will be running the script on the first of the month the keys
+are for, rather than near the end of the month before, edit the `-n` switch out of
+the quoted string.
+
+    TARGETS="user1@host1:relative/directory user2@host2:/absolute/directory"
+
+`TARGETS` is a space-separated list of `scp` user/host/paths that the DKIM files are
+to be uploaded to. The syntax for each entry is the syntax used in the `scp` command
+to specify the destination to copy to. Omit the trailing slashes from the directory
+paths, the script is coded to add them where needed. You may omit the user portion and
+the `@` character if you'll be uploading to the same username as the script runs under
+or if your SSH configuration is set up with the desired username for that host. The
+entries will work exactly like scp would if you specified the entry as the destination,
+use this as a guide to what you can do in each entry.
+
+    cd /key/location
+
+Edit `/key/location` to reflect the directory you want to use to generate the keys on
+the local system.
+
+The output of the script will be mailed to the user it runs under by the cron system.
+Set up any mail aliases or forwarding needed to get this output to the person responsible
+for key rotation so they can see any errors that occurred and get the reminder to check
+the mail servers for correct uploads.
+
+### `dkim_update.sh`
+
+This script runs on each mail server that handles outgoing mail. It must be run as
+root to allow it to restart the OpenDKIM service. Normally it's run from crontab
+early in the AM on the first of the month, after the `dkim_rotation.sh` script has been
+run. If `dkim_rotation.sh` is run late in the previous month the exact timing doesn't
+matter. An example crontab entry would be:
+
+    2 0 1 * * /usr/local/sbin/dkim_update.sh
+
+This runs the script at 2 minutes past midnight on the 1st of the month.
+
+The script will remove the uploaded copies if installation into the running OpenDKIM
+instance succeeds, to prevent later runs from picking up stale files by accident.
+
+To prepare the script for your installation a couple of pieces of data at the start of
+the script need to be edited to reflect the directories in use on your system.
+
+    SRC_DIR=/upload/location
+
+Edit this to reflect the directory the files were uploaded to on this host by the
+`dkim_rotation.sh` script.
+
+    DKIM_USER=opendkim
+    DKIM_GROUP=opendkim
+
+Edit these entries to reflect the user and group names used by the OpenDKIM software
+if necessary. The settings here are the standard ones.
+
+    cd /etc/opendkim
+
+Edit this directory if needed to reflect where OpenDKIM's configuration directory
+is. The setting here is the standard location.
+
+The output of this script will be mailed to the root user by the cron system, so you
+must make sure root's mail is routed to someone to review for errors.

@@ -20,13 +20,13 @@
 # OpenDKIM keys.
 
 # Edit this to point to the genkeys.py script, including it's path if it's not
-# in the PATH. Add the -n switch inside the quotes if you run this script before
-# the start of the month the keys are for.
-GENKEY="genkeys.py"
+# in the PATH. Remove the -n switch if you are running this script at the start
+# of the month the keys are for.
+GENKEY="genkeys.py -n"
 
-# Edit this space-separated list of the hosts and directories to upload OpenDKIM
-# keys to after generating them. Do not use trailing slashes.
-TARGETS=host1:relative/directory host2:/absolute/directory
+# Edit this space-separated list of the usernames, hosts and directories to upload
+# OpenDKIM keys to after generating them. Do not use trailing slashes.
+TARGETS="user1@host1:relative/directory user2@host2:/absolute/directory"
 
 # Edit to reflect the location you generate keys in
 cd /key/location
@@ -43,7 +43,7 @@ for x in $TARGETS
 do
     h=`echo $x | cut -d: -f1`
     d=`echo $x | cut -d: -f2-`
-    scp *.${selector}.key key.table signing.table ${x}/ && \
+    scp *.${selector}.key key.table signing.table ${h}:${d}/ && \
         ssh ${h} touch ${d}/.uploaded && \
         echo "DKIM key upload to $x completed successfully."
 done
