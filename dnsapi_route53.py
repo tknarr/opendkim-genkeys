@@ -16,17 +16,19 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Uses the 'requests' package.
+# Uses the 'requests' and 'requests-aws4auth' packages.
 
 # Requires:
-# dnsapi_data[0]        : API key ID
-# dnsapi_data[1]        : API secret key
-# dnsapi_domain_data[0] : Hosted domain name
+# dnsapi_data[0]        : AWS key ID
+# dnsapi_data[1]        : AWS secret key
+# dnsapi_domain_data[0] : AWS region (always us-east-1)
+# dnsapi_domain_data[1] : Hosted domain ID
+# dnsapi_domain_data[2] : Time-to-live, default 3600 seconds (1 hour)
 # key_data['plain']     : TXT record value in plain unquoted format
 
-# POST URL: https://route53.amazonaws.com/2013-04-01/{hostedzone}
+# POST URL: https://route53.amazonaws.com/2013-04-01/hostedzone/rrset
 
-# Parameters: TODO
+# Parameters:
 # api_key            : dnsapi_data[0]
 # api_action         : "domain.resource.create"
 # DomainID           : dnsapi_domain_data[0]
@@ -36,48 +38,116 @@
 
 import logging
 import requests
+from requests_aws4auth import AWS4Auth
+import xml.dom.minidom as Dom
 
 def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     if len(dnsapi_data) < 2:
-        logging.error( "DNS API route53: API key not configured" )
+        logging.error( "DNS API route53: AWS key not configured" )
         return False;
-    api_key_id = dnsapi_data[0]
-    api_key = dnsapi_data[1]
-    if len(dnsapi_domain_data) < 1:
-        logging.error( "DNS API route53: domain data does not contain hosted zone name" )
+    aws_key_id = dnsapi_data[0]
+    aws_key = dnsapi_data[1]
+    if len(dnsapi_domain_data) < 2:
+        logging.error( "DNS API route53: domain data does not contain required data" )
         return False
-    zone_name = dnsapi_domain_data[0]
+    region = dnsapi_domain_data[0]
+    zone_id = dnsapi_domain_data[1]
+    if len(dnsapi_domain_data) > 2:
+        try:
+            ttl = int( dnsapi_domain_data[2] )
+            if ttl < 5:
+                ttl = 5
+        except Exception:
+            ttl = 3600
+    else:
+        ttl = 3600
     try:
         selector = key_data['selector']
-        data = key_data['plain']
+        data = key_data['chunked']
+        domain_suffix = key_data['domain']
     except KeyError as e:
         logging.error( "DNS API route53: required information not present: %s", str(e) )
         return False
     if debugging:
         return True
 
+    aws4_auth = AWS4Auth( aws_key_id, aws_key, region, 'route53')
+
+    # Construct Route53 XML for the ChangeResourceRecordSets request
+    impl = Dom.getDOMImplementation()
+    doc = impl.createDocument( 'https://route53.amazonaws.com/doc/2013-04-01/',
+                               'ChangeResourceRecordSetsRequest', None )
+    root = doc.documentElement
+    chg_batch = doc.createElement( 'ChangeBatch' )
+    root.appendChild( chg_batch )
+    changes = doc.createElement( 'Changes' )
+    chg_batch.appendChild( changes )
+    change = doc.createElement( 'Change' )
+    changes.AppendChild( change )
+    action = doc.createElement( 'Action' )
+    action_text = doc.createTextNode( 'CREATE' )
+    action.appendChild( action_text )
+    change.appendChild( action )
+    rrset = doc.createElement( 'ResourceRecordSet' )
+    change.appendChild( rrset )
+    name = doc.createElement( 'Name' )
+    name_text = doc.createTextNode( selector + '._domainkey.' + domain_suffix )
+    name.appendChild( name_text )
+    rrset.appendChild( name )
+    rrtype = doc.createElement( 'Type' )
+    rrtype_text = doc.createTextNode( 'TXT' )
+    rrtype.appendChild( rrtype_text )
+    rrset.appendChild( rrtype )
+    ttl = doc.createElement( 'TTL' )
+    ttl_text = doc.createTextNode( str( ttl ) )
+    ttl.appendChild( ttl_text )
+    rrset.appendChild( ttl )
+    rrs = doc.createElement( 'ResourceRecords' )
+    rrset.appendChild( rrs )
+    rr = doc.createElement( 'ResourceRecord' )
+    rrs.appendChild( rr )
+    value = doc.createElement( 'Value' )
+    value_text = doc.createTextNode( data )
+    value.appendChild( value_text )
+    rr.appendChild( value )
+    route53_xml = doc.toxml( 'utf-8' )
+    doc.unlink() # Let things we don't need anymore be GC'd
+
     result = False
-    resp = requests.post( "https://api.linode.com/",
-                          data = { 'api_key': api_key,
-                                   'api_action': 'domain.resource.create',
-                                   'DomainID': domain_id,
-                                   'Type': 'TXT',
-                                   'Name': selector + "._domainkey",
-                                   'Target': data
-                                   } )
+    endpoint = "https://route53.amazonaws.com/2013-04-01/hostedzone/{0}/rrset".format( zone_id )
+    headers = { 'Content-Type': 'text/xml; charset=utf-8' }
+    resp = requests.post( endpoint, data = route53_xml, auth = aws4_auth, headers = headers )
     logging.info( "HTTP status: %d", resp.status_code )
 
     if resp.status_code == requests.codes.ok:
-        error_array = resp.json()['ERRORARRAY']
-        if len(error_array) > 0:
-            result = False
-            for error in error_array:
-                logging.error( "DNS API linode: error %d: %s", error['ERRORCODE'], error['ERRORMESSAGE'] )
-        else:
-            result = True
+        result = True
     else:
         result = False
-        logging.error( "DNS API linode: HTTP error %d", resp.status_code )
-        logging.debug( "DNS API linode: error response body:\n%s", resp.text )
+        try:
+            doc = Dom.parseString( resp.text )
+            error_type = doc.getElementsByTagName( 'Type' )
+            if error_type:
+                error_type_text = error_type[0].nodeValue()
+            else
+                error_type_text = ''
+            code = doc.getElementsByTagName( 'Code' )
+            if code:
+                code_text = code[0].nodeValue()
+            else:
+                code_text = ''
+            message = doc.getElementsByTagName( 'Message' )
+            if message:
+                message_text = message[0].nodeValue()
+            else
+                message_text = ''
+            error_text = error_type_text + ' : ' + code_text + ' : ' + message_text
+        except Exception:
+            error_text = ''
+
+        logging.error( "DNS API route53: HTTP error %d : %s", resp.status_code, error_text )
+        if error_text == '':
+            logging.error( "DNS API route53: error response body:\n%s", resp.text )
+        else:
+            logging.debug( "DNS API route53: error response body:\n%s", resp.text )
 
     return result
