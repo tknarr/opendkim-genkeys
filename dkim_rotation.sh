@@ -36,6 +36,14 @@ selector=`${GENKEY} --selector`
 
 # Generate the keys and tables
 ${GENKEY} || exit 1
+# Set permissions correctly
+for x in *.${selector}.key
+do
+    if [ -f $x ]
+    then
+        chmod u=rw,go= $x
+    fi
+done
 echo "DKIM ${selector} key generation completed successfully."
 
 # Do each upload, including the uploaded marker only if the upload succeeded
