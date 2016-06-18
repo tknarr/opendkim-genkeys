@@ -30,7 +30,7 @@
 # DKIM we need to be adding a new record for the new selector rather than changing
 # an existing record.
 
-# POST URL: http://freedns.afraid.org/subdomain/save.php?step=2
+# POST URL: https://freedns.afraid.org/subdomain/save.php?step=2
 
 # Sample POST data:
 # type=TXT&subdomain=test&domain_id=939393&address=Some+data&ttl=&ref=xxxxxxxxxxxxxxxx&send=Save%21
@@ -66,7 +66,7 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
         return True
 
     result = False
-    resp = requests.post( "http://freedns.afraid.org/subdomain/save.php?step=2",
+    resp = requests.post( "https://freedns.afraid.org/subdomain/save.php?step=2",
                           data = { 'type': 'TXT',
                                    'subdomain': selector + "._domainkey",
                                    'domain_id': domain_id,
