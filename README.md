@@ -214,6 +214,9 @@ keys more often than every month, you can pass a selector value as a command-lin
 
 ## Automation scripts
 
+After editing and testing, the two automation scripts should be installed in crontab as
+described in each script's explanation.
+
 ### `dkim_rotation.sh`
 
 This script runs on the system where you generate new DKIM keys. It generates new keys
