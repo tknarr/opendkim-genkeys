@@ -22,7 +22,7 @@
 # dnsapi_data[0]        : Global API key
 # dnsapi_data[1]        : Email address
 # dnsapi_domain_data[0] : Zone ID
-# dnsapi_domain_data[1] : TTL in seconds, 3600 if omitted
+# dnsapi_domain_data[1] : TTL in seconds, automatic if not specified
 # key_data['plain']     : TXT record value in plain unquoted format
 
 # POST URL: https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records
@@ -49,12 +49,12 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     if len(dnsapi_domain_data) > 1:
         try:
             ttl = int( dnsapi_domain_data[1] )
-            if ttl < 5:
-                ttl = 5
+            if ttl < 1:
+                ttl = 1
         except Exception:
-            ttl = 3600
+            ttl = 1
     else:
-        ttl = 3600
+        ttl = 1
     try:
         selector = key_data['selector']
         data = key_data['plain']
