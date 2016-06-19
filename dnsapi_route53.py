@@ -83,7 +83,7 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     changes = doc.createElement( 'Changes' )
     chg_batch.appendChild( changes )
     change = doc.createElement( 'Change' )
-    changes.AppendChild( change )
+    changes.appendChild( change )
     action = doc.createElement( 'Action' )
     action_text = doc.createTextNode( 'CREATE' )
     action.appendChild( action_text )
@@ -128,7 +128,7 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
             error_type = doc.getElementsByTagName( 'Type' )
             if error_type:
                 error_type_text = error_type[0].nodeValue()
-            else
+            else:
                 error_type_text = ''
             code = doc.getElementsByTagName( 'Code' )
             if code:
@@ -138,7 +138,7 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
             message = doc.getElementsByTagName( 'Message' )
             if message:
                 message_text = message[0].nodeValue()
-            else
+            else:
                 message_text = ''
             error_text = error_type_text + ' : ' + code_text + ' : ' + message_text
         except Exception:
