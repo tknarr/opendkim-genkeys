@@ -76,6 +76,6 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     else:
         result = False
         logging.error( "DNS API linode: HTTP error %d", resp.status_code )
-        logging.debug( "DNS API linode: error response body:\n%s", resp.text )
+        logging.error( "DNS API linode: error response body:\n%s", resp.text )
 
     return result

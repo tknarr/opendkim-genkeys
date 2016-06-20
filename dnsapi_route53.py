@@ -147,7 +147,5 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
         logging.error( "DNS API route53: HTTP error %d : %s", resp.status_code, error_text )
         if error_text == '':
             logging.error( "DNS API route53: error response body:\n%s", resp.text )
-        else:
-            logging.debug( "DNS API route53: error response body:\n%s", resp.text )
 
     return result

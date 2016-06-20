@@ -82,6 +82,6 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     else:
         result = False
         logging.error( "DNS API freedns: HTTP error %d", resp.status_code )
-        logging.debug( "DNS API freedns: error response body:\n%s", resp.text )
+        logging.error( "DNS API freedns: error response body:\n%s", resp.text )
 
     return result
