@@ -35,6 +35,7 @@
 
 import logging
 import requests
+import json
 
 def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     if len(dnsapi_data) < 2:
@@ -67,14 +68,14 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
 
     result = False
     endpoint = "https://api.cloudflare.com/client/v4/zones/{0}/dns_records".format( zone_id )
-    headers = { 'Content-Type': 'application/json',
-                'X-Auth-Key': api_key,
-                'X-Auth-Email': email }
-    data = { 'type': 'TXT',
-             'name': selector + '._domainkey.' + domain_suffix,
-             'content': data,
-             'ttl', ttl }
-    resp = requests.post( endpoint, data = data, headers = headers )
+    hdr = { 'Content-Type': 'application/json',
+            'X-Auth-Key': api_key,
+            'X-Auth-Email': email }
+    body = json.dumps( { 'type': 'TXT',
+                         'name': selector + '._domainkey.' + domain_suffix,
+                         'content': data,
+                         'ttl': ttl } )
+    resp = requests.post( endpoint, data = body, headers = hdr )
     logging.info( "HTTP status: %d", resp.status_code )
 
     if resp.status_code == requests.codes.ok:
@@ -87,6 +88,6 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     else:
         result = False
         logging.error( "DNS API cloudflare: HTTP error %d", resp.status_code )
-        logging.debug( "DNS API cloudflare: error response body:\n%s", resp.text )
+        logging.error( "DNS API cloudflare: error response body:\n%s", resp.text )
 
     return result
