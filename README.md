@@ -104,10 +104,11 @@ This file is the main one that ties domains, key files and DNS APIs together. As
 blank lines and lines beginning with `#` are ignored. The first field in each line is the
 domain name, the second field is the name identifying the key to be used for that domain, and
 the third field if present is the name of the DNS API used by the provider hosting that domain's
-DNS. Additional fields may be present after the third containing data specific to that domain's
-DNS data needed by the API, eg. domain identifiers telling the provider which of your domains
-that particular record is to be added to. Specific details about these fields and how to obtain
-the data can be found in the wiki in the provider's entry on the
+DNS. Omit the third field for domains hosted on services that don't use a supported API. Additional
+fields may be present after the third containing data specific to that domain's DNS data needed by
+the API, eg. domain identifiers telling the provider which of your domains that particular record
+is to be added to. Specific details about these fields and how to obtain the data can be found in
+the wiki in the provider's entry on the
 [DNS APIs page](https://github.com/tknarr/opendkim-genkeys/wiki/DNS-APIs). If no DNS API name is
 present, the script won't attempt to automatically update the DNS information and you'll need to
 take the information from the generated public key file and update the DNS data manually. If a
@@ -175,7 +176,7 @@ directory where your configuration files and data files are located. The binarie
 directory doesn't need to be in your path, if it isn't you may want an alias or
 small wrapper script so you don't have to use the full path to `genkeys.py` every
 time. You can put the binaries directly in the data directory, but it increases the
-clutter and the changes that you'll accidentally delete the script files.
+clutter and the chances that you'll accidentally delete the script files.
 
 Once the two configuration files are set up, you just run `genkeys.py` with the `-n`
 option at the end of the month. That will generate new private and public key files
