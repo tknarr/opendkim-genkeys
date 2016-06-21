@@ -39,7 +39,8 @@
 import logging
 import requests
 from requests_aws4auth import AWS4Auth
-import xml.dom.minidom as Dom
+import xml.dom.minidom
+#from xml.dom.minidom import parseString
 
 def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     if len(dnsapi_data) < 2:
@@ -74,10 +75,11 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     aws4_auth = AWS4Auth( aws_key_id, aws_key, region, 'route53')
 
     # Construct Route53 XML for the ChangeResourceRecordSets request
-    impl = Dom.getDOMImplementation()
+    impl = xml.dom.minidom.getDOMImplementation()
     doc = impl.createDocument( 'https://route53.amazonaws.com/doc/2013-04-01/',
                                'ChangeResourceRecordSetsRequest', None )
     root = doc.documentElement
+    root.setAttribute( 'xmlns', 'https://route53.amazonaws.com/doc/2013-04-01/' )
     chg_batch = doc.createElement( 'ChangeBatch' )
     root.appendChild( chg_batch )
     changes = doc.createElement( 'Changes' )
@@ -124,24 +126,26 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     else:
         result = False
         try:
-            doc = Dom.parseString( resp.text )
+            doc = xml.dom.minidom.parseString( resp.text )
+            doc.normalize()
             error_type = doc.getElementsByTagName( 'Type' )
-            if error_type:
-                error_type_text = error_type[0].nodeValue()
+            if error_type and error_type.length > 0:
+                error_type_text = getText( error_type.item(0).childNodes )
             else:
                 error_type_text = ''
             code = doc.getElementsByTagName( 'Code' )
-            if code:
-                code_text = code[0].nodeValue()
+            if code and code.length > 0:
+                code_text = getText( code.item(0).childNodes )
             else:
                 code_text = ''
             message = doc.getElementsByTagName( 'Message' )
-            if message:
-                message_text = message[0].nodeValue()
+            if message and message.length > 0:
+                message_text = getText( message.item(0).childNodes )
             else:
                 message_text = ''
             error_text = error_type_text + ' : ' + code_text + ' : ' + message_text
-        except Exception:
+        except Exception as e:
+            logging.error( "XML exception: %s", str(e) )
             error_text = ''
 
         logging.error( "DNS API route53: HTTP error %d : %s", resp.status_code, error_text )
@@ -149,3 +153,11 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
             logging.error( "DNS API route53: error response body:\n%s", resp.text )
 
     return result
+
+
+def getText( nodelist ):
+    rc = []
+    for node in nodelist:
+        if node.nodeType == node.TEXT_NODE:
+            rc.append(node.data)
+    return ''.join(rc)
