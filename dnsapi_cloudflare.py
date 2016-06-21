@@ -71,11 +71,11 @@ def update( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     hdr = { 'Content-Type': 'application/json',
             'X-Auth-Key': api_key,
             'X-Auth-Email': email }
-    body = json.dumps( { 'type': 'TXT',
-                         'name': selector + '._domainkey.' + domain_suffix,
-                         'content': data,
-                         'ttl': ttl } )
-    resp = requests.post( endpoint, data = body, headers = hdr )
+    body = { 'type': 'TXT',
+             'name': selector + '._domainkey.' + domain_suffix,
+             'content': data,
+             'ttl': ttl }
+    resp = requests.post( endpoint, json = body, headers = hdr )
     logging.info( "HTTP status: %d", resp.status_code )
 
     if resp.status_code == requests.codes.ok:
