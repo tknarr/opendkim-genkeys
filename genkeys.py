@@ -43,6 +43,8 @@ domain_filename = 'domains.ini'
 dns_api_defs_filename = 'dnsapi.ini'
 
 
+VERSION = '1.4'
+
 # Creates the private-key file, and the public-key txt-record file in chunked (BIND) form.
 # Returns a public key record dict, or None in the event of an error:
 #   plain:   unquoted unchunked data
@@ -208,8 +210,14 @@ parser.add_argument( "--use-null", dest = 'use_null_dnsapi', action = 'store_tru
                      help = "Silently use the null DNS API instead of the real API" )
 parser.add_argument( "--selector", dest='output_selector', action = 'store_true',
                      help = "Causes the generated selector to be output" )
+parser.add_argument( "--version", dest='display_version', action = 'store_true',
+                     help = "Display the program version" )
 parser.add_argument( "selector", nargs = '?', default = None, help = "Selector to use" )
 args = parser.parse_args()
+
+if args.display_version:
+    print "OpenDKIM genkeys.py v{0}".format( VERSION )
+    sys.exit( 0 )
 
 if args.log_info:
     level = logging.INFO
