@@ -52,7 +52,7 @@ do
     h=`echo $x | cut -d: -f1`
     d=`echo $x | cut -d: -f2-`
     scp *.${selector}.key key.table signing.table ${h}:${d}/ && \
-        ssh ${h} touch ${d}/.uploaded && \
+        ssh -x ${h} touch ${d}/.uploaded && \
         echo "DKIM key upload to $x completed successfully."
 done
 
