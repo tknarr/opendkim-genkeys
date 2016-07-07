@@ -41,14 +41,20 @@ OpenDKIM package before using this tool.
 
 ## Usage
 
-    genkeys.py [-h] [-n] [-v] [--no-dns] [selector]
-    genkeys.py [-n] --selector [selector]
+    genkeys.py [-v] [-n] [-a] [--no-dns] [--debug] [--use-null] [selector]
+    genkeys.py [-n] -s [selector]
+    genkeys.py --help
+    genkeys.py --version
 
-*   `-h` : display help
-*   `-n` : use next month instead of this month when automatically generating a selector
-*   `-v` : log additional informational messages while processing
-*   `--no-dns` : do not attempt to automatically update DNS records
-*   `--selector` : output the selector and do nothing else
+*   `-h`, `--help`: Show this help message and exit
+*   `-v`, `--verbose`: Log informational messages in addition to errors
+*   `-n`, `--next-month`: Use next month's date for automatically-generated selectors
+*   `-a`, `--avoid-overwrite`: Add a suffix to the selector if needed to avoid overwriting existing files
+*   `-s`, `--selector`: Causes the generated selector to be output
+*   `--no-dns`: Do not update DNS data
+*   `--debug`: Log debugging info and do not update DNS
+*   `--use-null`: Silently use the null DNS API instead of the real API
+*   `--version`: Display the program version
 
 If no `selector` is specified, one will be automatically generated based on the current
 month (or the next month if `-n` was used). Standard practice would be to omit the
@@ -58,11 +64,15 @@ ahead of time and need the selector to reflect the month you're generating for r
 than the current one. If `--no-dns` is used you'll have to manually update the DNS
 records with the data in the generated `.txt` files, otherwise the script will try
 to automatically update the DNS records for all domains it's got DNS API support and
-information for.
+information for. Normally if the resulting files would be overwritten the operation will
+fail. The `-a` option will cause single-uppercase-letter suffixes on the selector to be
+tried until filenames that do not exist are found or all 26 letters are exhausted before
+failing. The suffix is per target domain, so files for different domains may end up with
+different suffixes.
 
-The `--selector` option can be used to cause the tool to output the generated selector
+The `-s` option can be used to cause the tool to output the generated selector
 on standard output for capture by a script. The `-n` option can be used in conjunction
-with `--selector`, other options will have no effect when `--selector` is specified.
+with `-s`, other options will have no effect when `-s` is specified.
 This is to assist with scripts to automatically upload the generated data files to a
 server for installation.
 

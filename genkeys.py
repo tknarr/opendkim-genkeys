@@ -47,9 +47,28 @@ VERSION = '1.4'
 
 # Creates the private-key file, and the public-key txt-record file in chunked (BIND) form.
 # Returns a public key record dict, or None in the event of an error:
-#   plain:   unquoted unchunked data
-#   chunked: BIND-format quoted chunked data
-def gen_key( target_name, selector ):
+#   selector: real selector value used if asked to avoid overwrites instead of failing
+#   plain:    unquoted unchunked data
+#   chunked:  BIND-format quoted chunked data
+def gen_key( target_name, selector, find_unused_selector = False ):
+    # Check for existence of resulting files and handle it
+    suffix_list = [ '' ]
+    if find_unused_selector:
+        suffix_list += list( string.ascii_uppercase )
+    real_selector = None
+    for suffix in suffix_list:
+        rs = selector + suffix
+        private_key_filename = target_name +  "." + rs + ".key"
+        public_key_filename = target_name + "." + rs + ".txt"
+        if ( not os.path.exists( private_key_filename ) ) and ( not os.path.exists( public_key_filename ) ):
+            real_selector = rs
+            break
+    if real_selector == None:
+        logging.critical( "Files for %s selector %s already exist", target_name, selector )
+        return None
+    if real_selector != selector:
+        logging.warning( "Avoided overwriting keys for %s by using selector %s", target_name, real_selector )
+
     # Use the OpenDKIM tool to generate the key data files
     try:
         wait_status = os.system( "opendkim-genkey -b 2048 -r -s " + selector + " -d " + target_name )
@@ -64,7 +83,7 @@ def gen_key( target_name, selector ):
 
     # The private key always ends up as target_name.selector.key
     try:
-        os.rename( selector + ".private", target_name + "." + selector + ".key" )
+        os.rename( selector + ".private", private_key_filename )
     except OSError as e:
         logging.critical( "Cannot rename the private key file %s.private", selector )
         logging.error( "%s", str( e ) )
@@ -124,7 +143,7 @@ def gen_key( target_name, selector ):
         logging.critical( "No DNS record value found" )
         return None
 
-    output_file = open( target_name + "." + selector + ".txt", 'w' )
+    output_file = open( public_key_filename, 'w' )
     output_file.write( chunked_value + '\n' )
     output_file.close()
 
@@ -136,7 +155,7 @@ def gen_key( target_name, selector ):
         logging.error( "%s", str( e ) )
         return None
 
-    return { 'plain': value, 'chunked': chunked_value }
+    return { 'selector': real_selector, 'plain': value, 'chunked': chunked_value }
 
 
 def split_ini_line( linetext ):
@@ -198,18 +217,20 @@ def find_dnsapi_modules( pn ):
 
 # Set up command-line argument parser and parse arguments
 parser = argparse.ArgumentParser( description = "Generate OpenDKIM key data for a set of domains" )
-parser.add_argument( "-n", dest = 'next_month', action = 'store_true',
-                     help = "Use next month's date for automatically-generated selectors" )
-parser.add_argument( "-v", dest = 'log_info', action = 'store_true',
+parser.add_argument( "-v", "--verbose", dest = 'log_info', action = 'store_true',
                      help = "Log informational messages in addition to errors" )
+parser.add_argument( "-n", "--next-month", dest = 'next_month', action = 'store_true',
+                     help = "Use next month's date for automatically-generated selectors" )
+parser.add_argument( "-a", "--avoid-overwrite", dest = 'avoid_collisions', action = 'store_true',
+                     help = "Add a suffix to the selector if needed to avoid overwriting existing files" )
+parser.add_argument( "-s", "--selector", dest='output_selector', action = 'store_true',
+                     help = "Causes the generated selector to be output" )
 parser.add_argument( "--no-dns", dest = 'update_dns', action = 'store_false',
                      help = "Do not update DNS data" )
 parser.add_argument( "--debug", dest = 'log_debug', action = 'store_true',
                      help = "Log debugging info and do not update DNS" )
 parser.add_argument( "--use-null", dest = 'use_null_dnsapi', action = 'store_true',
                      help = "Silently use the null DNS API instead of the real API" )
-parser.add_argument( "--selector", dest='output_selector', action = 'store_true',
-                     help = "Causes the generated selector to be output" )
 parser.add_argument( "--version", dest='display_version', action = 'store_true',
                      help = "Display the program version" )
 parser.add_argument( "selector", nargs = '?', default = None, help = "Selector to use" )
@@ -234,6 +255,8 @@ should_output_selector = args.output_selector
 if should_output_selector:
     should_update_dns = False
     level = logging.ERROR
+
+avoid_collisions = args.avoid_collisions
 
 logging.basicConfig( level = level, format = "%(levelname)s: %(message)s" )
 
@@ -285,7 +308,7 @@ for item in domain_data:
 keys = {} # Key = key name (field 1) from domain_data[n], Value = key data dict
 for target in key_names:
     logging.info( "Generating key %s", target )
-    key_data = gen_key( target, selector )
+    key_data = gen_key( target, selector, avoid_collisions )
     if key_data == None:
         logging.critical( "    Error generating key %s", target )
         sys.exit( 1 )
@@ -341,9 +364,8 @@ if should_update_dns:
             if dnsapi_module == None:
                 logging.error( "No DNS API %s found for %s", dnsapi_name, item[0] )
             if dnsapi_module != None and dnsapi_data != None and key_data != None:
-                logging.info( "Updating selector %s for %s with key %s", selector, item[0], item[1] )
+                logging.info( "Updating selector %s for %s with key %s", key_data[ 'selector' ], item[0], item[1] )
                 key_data['domain'] = item[0]
-                key_data['selector'] = selector
                 key_data['dnsapi'] = dnsapi_name
                 sts = dnsapi_module.update( dnsapi_data, dnsapi_domain_data, key_data, args.log_debug )
                 if not sts:
