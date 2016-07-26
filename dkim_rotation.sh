@@ -35,7 +35,7 @@ cd /key/location
 selector=`${GENKEY} --selector`
 
 # Generate the keys and tables
-${GENKEY} || exit 1
+${GENKEY} ${selector} || exit 1
 # Set permissions correctly
 for x in *.${selector}.key
 do
