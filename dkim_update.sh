@@ -44,8 +44,8 @@ do
     if [ -f $x ]
     then
         cp $x keys/ || exit 1
-        chown ${DKIM_USER}:${DKIM_GROUP} $x || exit 1
-        chmod u=rw,go= $x || exit 1
+        chown ${DKIM_USER}:${DKIM_GROUP} keys/$x || exit 1
+        chmod u=rw,go= keys/$x || exit 1
     fi
 done
 
