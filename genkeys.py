@@ -43,7 +43,7 @@ domain_filename = 'domains.ini'
 dns_api_defs_filename = 'dnsapi.ini'
 
 
-VERSION = '1.4.2'
+VERSION = '1.4.3'
 
 # Creates the private-key file, and the public-key txt-record file in chunked (BIND) form.
 # Returns a public key record dict, or None in the event of an error:
