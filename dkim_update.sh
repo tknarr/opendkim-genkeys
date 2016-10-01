@@ -43,9 +43,10 @@ for x in ${SRC_DIR}/*.key
 do
     if [ -f $x ]
     then
+        y=`basename $x`
         cp $x keys/ || exit 1
-        chown ${DKIM_USER}:${DKIM_GROUP} keys/$x || exit 1
-        chmod u=rw,go= keys/$x || exit 1
+        chown ${DKIM_USER}:${DKIM_GROUP} keys/$y || exit 1
+        chmod u=rw,go= keys/$y || exit 1
     fi
 done
 
@@ -62,9 +63,10 @@ for x in ${SRC_DIR}/*.table
 do
     if [ -f $x ]
     then
+        y=`basename $x`
         cp $x ./ || exit 1
-        chown ${DKIM_USER}:${DKIM_GROUP} $x || exit 1
-        chmod u=rw,go=r $x || exit 1
+        chown ${DKIM_USER}:${DKIM_GROUP} $y || exit 1
+        chmod u=rw,go=r $y || exit 1
     fi
 done
 
