@@ -41,7 +41,7 @@ OpenDKIM package before using this tool.
 
 ## Usage
 
-    genkeys.py [-v] [-n] [-a] [--no-dns] [--debug] [--use-null] [selector]
+    genkeys.py [-v] [-n] [-a] [--no-dns] [--no-cleanup] [--debug] [--use-null] [selector]
     genkeys.py [-n] -s [selector]
     genkeys.py --help
     genkeys.py --version
@@ -52,6 +52,7 @@ OpenDKIM package before using this tool.
 *   `-a`, `--avoid-overwrite`: Add a suffix to the selector if needed to avoid overwriting existing files
 *   `-s`, `--selector`: Causes the generated selector to be output
 *   `--no-dns`: Do not update DNS data
+*   `--no-cleanup`: Do not attempt to delete old key files
 *   `--debug`: Log debugging info and do not update DNS
 *   `--use-null`: Silently use the null DNS API instead of the real API
 *   `--version`: Display the program version
@@ -133,6 +134,12 @@ when they're just synonyms for each other) might both reasonably use key `exampl
 
 # Generated files
 
+### `dns_update_data.ini`
+
+This file records information about the records created for each domain where DNS
+servers were updated. If it doesn't exist, it will be created (warning messages will
+be issued, but they're strictly because a template file should have existed). 
+
 ## Private and public key files
 
 Both types of files follow the same pattern for the base filename: the key name, a dot and
@@ -187,6 +194,11 @@ directory doesn't need to be in your path, if it isn't you may want an alias or
 small wrapper script so you don't have to use the full path to `genkeys.py` every
 time. You can put the binaries directly in the data directory, but it increases the
 clutter and the chances that you'll accidentally delete the script files.
+
+Edit `dnsapi.ini` and `domains.ini` and enter the information for your accounts
+and domains at your DNS service providers. If you have domains at DNS service providers
+that aren't supported by the program, leave the DNS API information in `domains.ini`
+blank for them and keys will be generated so you can set the TXT records manually.
 
 Once the two configuration files are set up, you just run `genkeys.py` with the `-n`
 option at the end of the month. That will generate new private and public key files

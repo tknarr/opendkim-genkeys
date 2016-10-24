@@ -17,15 +17,15 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys
+import argparse
+import datetime
+import glob
+import importlib
+import logging
 import os
 import os.path
-import glob
-import datetime
-import logging
-import argparse
-import importlib
 import string
+import sys
 
 # Settings, edit as appropriate for your environment
 
@@ -41,67 +41,69 @@ never_update_dns = False
 # Internal settings, should not need changed
 domain_filename = 'domains.ini'
 dns_api_defs_filename = 'dnsapi.ini'
+dns_update_data_filename = 'dns_update_data.ini'
 
+VERSION = '1.5.0'
 
-VERSION = '1.4.2'
 
 # Creates the private-key file, and the public-key txt-record file in chunked (BIND) form.
 # Returns a public key record dict, or None in the event of an error:
 #   selector: real selector value used if asked to avoid overwrites instead of failing
 #   plain:    unquoted unchunked data
 #   chunked:  BIND-format quoted chunked data
-def gen_key( target_name, selector, find_unused_selector = False ):
+def gen_key(target_name, selector, find_unused_selector=False):
     # Check for existence of resulting files and handle it
-    suffix_list = [ '' ]
+    suffix_list = ['']
     if find_unused_selector:
-        suffix_list += list( string.ascii_uppercase )
+        suffix_list += list(string.ascii_uppercase)
     real_selector = None
     for suffix in suffix_list:
         rs = selector + suffix
-        private_key_filename = target_name +  "." + rs + ".key"
+        private_key_filename = target_name + "." + rs + ".key"
         public_key_filename = target_name + "." + rs + ".txt"
-        if ( not os.path.exists( private_key_filename ) ) and ( not os.path.exists( public_key_filename ) ):
+        if (not os.path.exists(private_key_filename)) and (not os.path.exists(public_key_filename)):
             real_selector = rs
             break
-    if real_selector == None:
-        logging.critical( "Files for %s selector %s already exist", target_name, selector )
+    if real_selector is None:
+        logging.critical("Files for %s selector %s already exist", target_name, selector)
         return None
+    # Cannot get to this point without having valid public and private key filenames assigned.
     if real_selector != selector:
-        logging.warning( "Avoided overwriting keys for %s by using selector %s", target_name, real_selector )
+        logging.warning("Avoided overwriting keys for %s by using selector %s", target_name, real_selector)
 
     # Use the OpenDKIM tool to generate the key data files
     try:
-        wait_status = os.system( "opendkim-genkey -b 2048 -r -s " + selector + " -d " + target_name )
+        wait_status = os.system("opendkim-genkey -b 2048 -r -s " + selector + " -d " + target_name)
     except OSError as e:
-        logging.critical( "Error running opendkim-genkey" )
-        logging.error( "%s", str( e ) )
+        logging.critical("Error running opendkim-genkey")
+        logging.error("%s", str(e))
         return None
-    status = ( wait_status & 0xFF00 ) >> 8
+    status = (wait_status & 0xFF00) >> 8
     if status != 0:
-        logging.critical( "Error status %d returned by opendkim-genkey", status )
+        logging.critical("Error status %d returned by opendkim-genkey", status)
         return None
 
     # The private key always ends up as target_name.selector.key
     try:
-        os.rename( selector + ".private", private_key_filename )
+        os.rename(selector + ".private", private_key_filename)
     except OSError as e:
-        logging.critical( "Cannot rename the private key file %s.private", selector )
-        logging.error( "%s", str( e ) )
+        logging.critical("Cannot rename the private key file %s.private", selector)
+        logging.error("%s", str(e))
         return None
 
     # Read opendkim-genkey's file and reformat the public key
 
     # Snarf in the public key file for processing
     try:
-        pubkey_file = open( selector + ".txt", 'r' )
+        pubkey_file = open(selector + ".txt", 'r')
     except IOError as e:
-        logging.critical( "Error accessing the public key file %s.txt", selector )
-        logging.error( "%s", str( e ) )
+        logging.critical("Error accessing the public key file %s.txt", selector)
+        logging.error("%s", str(e))
         return None
     input_text = pubkey_file.read()
     pubkey_file.close()
-    if len( input_text ) <= 0:
-        logging.critical( "No input found" )
+    if len(input_text) <= 0:
+        logging.critical("No input found")
         return None
 
     # Find the first double-quote, and the double-quote after it. If we can't
@@ -115,87 +117,118 @@ def gen_key( target_name, selector, find_unused_selector = False ):
     chunked_value = ''
     start = 0
     while start >= 0:
-        first_quote = input_text.find( '"', start )
+        first_quote = input_text.find('"', start)
         if first_quote >= start:
-            second_quote = input_text.find( '"', first_quote + 1 )
+            second_quote = input_text.find('"', first_quote + 1)
         else:
-            if len( value ) == 0:
+            if len(value) == 0:
                 # Error, we couldn't find the start
-                logging.critical( "Cannot find start of DNS record value" )
+                logging.critical("Cannot find start of DNS record value")
                 return None
             else:
                 # We're done when we can't find the start of the next chunk
                 break
         if second_quote >= 0:
             # Unchunked form
-            value += input_text[first_quote+1:second_quote]
+            value += input_text[first_quote + 1:second_quote]
             # Chunked form
-            if len( chunked_value ) > 0:
+            if len(chunked_value) > 0:
                 chunked_value += ' '
-            chunked_value += input_text[first_quote:second_quote+1]
+            chunked_value += input_text[first_quote:second_quote + 1]
             start = second_quote + 1
         else:
-            logging.error( "Syntax error in record data: no closing quote found" )
+            logging.error("Syntax error in record data: no closing quote found")
             break
 
     # We should've found at least one chunk of key data
-    if len( value ) == 0:
-        logging.critical( "No DNS record value found" )
+    if len(value) == 0:
+        logging.critical("No DNS record value found")
         return None
 
-    output_file = open( public_key_filename, 'w' )
-    output_file.write( chunked_value + '\n' )
+    output_file = open(public_key_filename, 'w')
+    output_file.write(chunked_value + '\n')
     output_file.close()
 
     # Clean up the file opendkim-genkey created, we don't need it anymore
     try:
-        os.remove( selector + ".txt" )
+        os.remove(selector + ".txt")
     except OSError as e:
-        logging.error( "Could not delete origin file %s.txt", selector )
-        logging.error( "%s", str( e ) )
+        logging.error("Could not delete origin file %s.txt", selector)
+        logging.error("%s", str(e))
         return None
 
-    return { 'selector': real_selector, 'plain': value, 'chunked': chunked_value }
+    return {'selector': real_selector, 'plain': value, 'chunked': chunked_value}
 
 
-def split_ini_line( linetext ):
+def split_ini_line(linetext):
     l = linetext.split()
     if len(l) == 0 or len(l[0]) == 0 or l[0][0] == '#':
         return None
     return l
 
 
-def split_ini_file( filetext ):
+def split_ini_file(filetext):
     lines = filetext.splitlines()
     l = []
     for line in lines:
         if len(line) > 0:
-            fields = split_ini_line( line )
-            if fields != None:
-                l.append( fields )
+            fields = split_ini_line(line)
+            if fields is not None:
+                l.append(fields)
     if len(l) == 0:
         return None
     return l
 
 
-def process_ini_file( filename ):
+def process_ini_file(filename, critical=True):
     # Snarf in the contents
     try:
-        ini_file = open( filename, 'r' )
+        ini_file = open(filename, 'r')
     except IOError as e:
-        logging.critical( "Error accessing file %s", filename )
-        logging.error( "%s", str( e ) )
+        if critical:
+            logging.critical("Error accessing file %s", filename)
+            logging.error("%s", str(e))
+        else:
+            logging.warning("Error accessing file %s", filename)
+            logging.warning("%s", str(e))
         return None
     input_text = ini_file.read()
     ini_file.close()
 
-    ini_data = split_ini_file( input_text )
-    if len( ini_data ) == 0:
-        return None
+    ini_data = split_ini_file(input_text)
     return ini_data
 
 
-def find_dnsapi_modules( pn ):
+def write_ini_file(filename, records):
+    try:
+        ini_file = open(filename, 'w')
+    except IOError as e:
+        logging.critical("Error writing file %s", filename)
+        logging.error("%s", str(e))
+        return
+    for record in records:
+        line = ""
+        for field in record:
+            if len(line) > 0:
+                line += '\t'
+            if isinstance(field, datetime.datetime):
+                line += field.strftime('%Y-%m-%dT%H:%M:%S')
+            else:
+                line += str(field)
+        line += '\n'
+        ini_file.write(line)
+    ini_file.close()
+    return
+
+
+def find_key_for_domain(domain_data, domain):
+    for domain_entry in domain_data:
+        if domain_entry[0] == domain:
+            return domain_entry[1]
+    return None
+
+
+def find_dnsapi_modules(pn):
     # Go through all possible names (pulled from what's mentioned in the
     # dnsapi.ini file) and for each one X see if we can load a module named
     # dnsapi_X (file will be dnsapi_X.py).
@@ -204,41 +237,42 @@ def find_dnsapi_modules( pn ):
     for api_name in possible_names:
         module_name = "dnsapi_" + api_name
         try:
-            module = importlib.import_module( module_name )
+            module = importlib.import_module(module_name)
         except ImportError as e:
             module = None
-            logging.error( "Module %s for DNS API %s not found", module_name, api_name )
-        if module != None:
-            logging.debug( "DNS API module %s loaded", api_name )
-            dnsapis[ api_name ] = module
+            logging.error("Module %s for DNS API %s not found", module_name, api_name)
+        if module is not None:
+            logging.debug("DNS API module %s loaded", api_name)
+            dnsapis[api_name] = module
     return dnsapis
 
 
-
 # Set up command-line argument parser and parse arguments
-parser = argparse.ArgumentParser( description = "Generate OpenDKIM key data for a set of domains" )
-parser.add_argument( "-v", "--verbose", dest = 'log_info', action = 'store_true',
-                     help = "Log informational messages in addition to errors" )
-parser.add_argument( "-n", "--next-month", dest = 'next_month', action = 'store_true',
-                     help = "Use next month's date for automatically-generated selectors" )
-parser.add_argument( "-a", "--avoid-overwrite", dest = 'avoid_collisions', action = 'store_true',
-                     help = "Add a suffix to the selector if needed to avoid overwriting existing files" )
-parser.add_argument( "-s", "--selector", dest='output_selector', action = 'store_true',
-                     help = "Causes the generated selector to be output" )
-parser.add_argument( "--no-dns", dest = 'update_dns', action = 'store_false',
-                     help = "Do not update DNS data" )
-parser.add_argument( "--debug", dest = 'log_debug', action = 'store_true',
-                     help = "Log debugging info and do not update DNS" )
-parser.add_argument( "--use-null", dest = 'use_null_dnsapi', action = 'store_true',
-                     help = "Silently use the null DNS API instead of the real API" )
-parser.add_argument( "--version", dest='display_version', action = 'store_true',
-                     help = "Display the program version" )
-parser.add_argument( "selector", nargs = '?', default = None, help = "Selector to use" )
+parser = argparse.ArgumentParser(description="Generate OpenDKIM key data for a set of domains")
+parser.add_argument("-v", "--verbose", dest='log_info', action='store_true',
+                    help="Log informational messages in addition to errors")
+parser.add_argument("-n", "--next-month", dest='next_month', action='store_true',
+                    help="Use next month's date for automatically-generated selectors")
+parser.add_argument("-a", "--avoid-overwrite", dest='avoid_collisions', action='store_true',
+                    help="Add a suffix to the selector if needed to avoid overwriting existing files")
+parser.add_argument("-s", "--selector", dest='output_selector', action='store_true',
+                    help="Causes the generated selector to be output")
+parser.add_argument("--no-dns", dest='update_dns', action='store_false',
+                    help="Do not update DNS data")
+parser.add_argument("--no-cleanup", dest='cleanup_files', action='store_false',
+                    help="Do not delete old key files")
+parser.add_argument("--debug", dest='log_debug', action='store_true',
+                    help="Log debugging info and do not update DNS")
+parser.add_argument("--use-null", dest='use_null_dnsapi', action='store_true',
+                    help="Silently use the null DNS API instead of the real API")
+parser.add_argument("--version", dest='display_version', action='store_true',
+                    help="Display the program version")
+parser.add_argument("selector", nargs='?', default=None, help="Selector to use")
 args = parser.parse_args()
 
 if args.display_version:
-    print "OpenDKIM genkeys.py v{0}".format( VERSION )
-    sys.exit( 0 )
+    print "OpenDKIM genkeys.py v{0}".format(VERSION)
+    sys.exit(0)
 
 if args.log_info:
     level = logging.INFO
@@ -258,13 +292,13 @@ if should_output_selector:
 
 avoid_collisions = args.avoid_collisions
 
-logging.basicConfig( level = level, format = "%(levelname)s: %(message)s" )
+logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
 # If we weren't given an explicit selector, the default is YYYYMM based on
 # either this month or next month.
 selector = args.selector
-if selector == None:
-    selector_date = datetime.date.today().replace( day = 1 )
+if selector is None:
+    selector_date = datetime.date.today().replace(day=1)
     if args.next_month:
         y = selector_date.year
         m = selector_date.month
@@ -272,104 +306,177 @@ if selector == None:
         if m > 12:
             m = 1
             y += 1
-        selector_date = selector_date.replace( year = y, month = m )
-    selector = selector_date.strftime( "%Y%m" )
-logging.info( "Selector: %s", selector )
+        selector_date = selector_date.replace(year=y, month=m)
+    selector = selector_date.strftime("%Y%m")
+logging.info("Selector: %s", selector)
 if should_output_selector:
     print selector
-    sys.exit( 0 )
+    sys.exit(0)
 
 # Process dnsapi.ini
 # If we're supposed to update DNS records but don't have any definitions for
 # the DNS APIs, we record an error but we can continue to generate the keys
 # and public key files anyway. The admin will just have to update the DNS
 # records manually.
-dnsapi_info = {} # Key = DNS API name, Value = remainder of fields
-dnsapi_data = process_ini_file( dns_api_defs_filename )
-if dnsapi_data == None and should_update_dns:
-    logging.error( "No DNS API definitions found in %s", dns_api_defs_filename )
+dnsapi_info = {}  # Key = DNS API name, Value = remainder of fields
+dnsapi_data = process_ini_file(dns_api_defs_filename)
+if dnsapi_data is None and should_update_dns:
+    logging.error("No DNS API definitions found in %s", dns_api_defs_filename)
     should_update_dns = False
 else:
     for item in dnsapi_data:
-        dnsapi_info[ item[0] ] = item[1:len(item)]
+        dnsapi_info[item[0]] = item[1:len(item)]
 
 # Process domains.ini
-domain_data = process_ini_file( domain_filename )
-if domain_data == None:
-    logging.critical( "No domain definitions found in %s", domain_filename )
-    sys.exit( 1 )
+domain_data = process_ini_file(domain_filename)
+if domain_data is None:
+    logging.critical("No domain definitions found in %s", domain_filename)
+    sys.exit(1)
 # We'll need a list of all the key names used by domains
 key_names = []
 for item in domain_data:
     if item[1] not in key_names:
-        key_names.append( item[1] )
+        key_names.append(item[1])
 
 # Generate our keys, one per key name
-keys = {} # Key = key name (field 1) from domain_data[n], Value = key data dict
+keys = {}  # Key = key name (field 1) from domain_data[n], Value = key data dict
 for target in key_names:
-    logging.info( "Generating key %s", target )
-    key_data = gen_key( target, selector, avoid_collisions )
-    if key_data == None:
-        logging.critical( "    Error generating key %s", target )
-        sys.exit( 1 )
+    logging.info("Generating key %s", target)
+    key_data = gen_key(target, selector, avoid_collisions)
+    if key_data is None:
+        logging.critical("    Error generating key %s", target)
+        sys.exit(1)
     keys[target] = key_data
 # That also gives us the private key and public key txt files needed
 
 # Generate the key.table and signing.table files
 try:
-    key_table_file = open( "key.table", 'w' )
-    signing_table_file = open( "signing.table", 'w' )
+    key_table_file = open("key.table", 'w')
+    signing_table_file = open("signing.table", 'w')
 except IOError as e:
-    logging.critical( "Error creating key or signing table file" )
-    logging.error( "%s", str( e ) )
-    sys.exit( 1 )
+    logging.critical("Error creating key or signing table file")
+    logging.error("%s", str(e))
+    sys.exit(1)
 for item in domain_data:
-    code = item[0].replace( '.', '-' )
+    code = item[0].replace('.', '-')
     try:
-        key_table_file.write( "%s\t%s:%s:%s/%s.%s.key\n" % \
-                              ( code, item[0], selector, opendkim_dir, item[1], selector ) )
-        signing_table_file.write( "*@%s\t%s\n" % ( item[0], code ) )
+        key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
+                             (code, item[0], selector, opendkim_dir, item[1], selector))
+        signing_table_file.write("*@%s\t%s\n" % (item[0], code))
     except IOError as e:
-        logging.critical( "Error creating key or signing table file" )
-        logging.error( "%s", str( e ) )
-        sys.exit( 1 )
+        logging.critical("Error creating key or signing table file")
+        logging.error("%s", str(e))
+        sys.exit(1)
 key_table_file.close()
 signing_table_file.close()
 
 # Check for our DNS API modules. If we don't have any, there's no sense in
 # trying to do automatic updating even if we're supposed to.
 if should_update_dns:
-    dnsapis = find_dnsapi_modules( dnsapi_info.keys() ) # Key = DNS API name, Value = module
+    dnsapis = find_dnsapi_modules(dnsapi_info.keys())  # Key = DNS API name, Value = module
     if len(dnsapis) == 0:
-        logging.warning( "No DNS API modules found at %s", os.path.dirname( __file__ ) )
+        logging.warning("No DNS API modules found at %s", os.path.dirname(__file__))
         should_update_dns = False
 
 if should_update_dns:
-    logging.info( "Updating DNS records" )
+    update_data = process_ini_file(dns_update_data_filename, False)
+
+    if update_data is not None:
+        # Convert update data timestamp field to a datetime
+        for record in update_data:
+            if record[2] is not None:
+                dt = datetime.datetime.strptime(record[2], '%Y-%m-%dT%H:%M:%S')
+                record[2] = dt
+
+    logging.info("Updating DNS records")
+    # Discard records older than 10 weeks (roughly the midpoint of the month 2 months ago),
+    # which should retain the last 2 records and discard the 3rd and older record if a monthly
+    # rotation is in use.
+    cutoff_delta = datetime.timedelta(70)
+    cutoff = datetime.datetime.now() - cutoff_delta
     for item in domain_data:
         if len(item) > 2:
             dnsapi_name = item[2]
             dnsapi_domain_data = item[3:len(item)]
             try:
                 if args.use_null_dnsapi:
-                    dnsapi_module = dnsapis[ 'null' ]
+                    dnsapi_module = dnsapis['null']
                 else:
-                    dnsapi_module = dnsapis[ dnsapi_name ]
-                dnsapi_data = dnsapi_info[ dnsapi_name ]
-                key_data = keys[ item[1] ].copy()
+                    dnsapi_module = dnsapis[dnsapi_name]
+                dnsapi_data = dnsapi_info[dnsapi_name]
+                key_data = keys[item[1]].copy()
             except KeyError:
                 dnsapi_module = None
                 dnsapi_data = None
                 key_data = None
-            if dnsapi_module == None:
-                logging.error( "No DNS API %s found for %s", dnsapi_name, item[0] )
-            if dnsapi_module != None and dnsapi_data != None and key_data != None:
-                logging.info( "Updating selector %s for %s with key %s", key_data[ 'selector' ], item[0], item[1] )
+            if dnsapi_module is None:
+                logging.error("No DNS API %s found for %s", dnsapi_name, item[0])
+            if dnsapi_module is not None and dnsapi_data is not None and key_data is not None:
                 key_data['domain'] = item[0]
                 key_data['dnsapi'] = dnsapi_name
-                sts = dnsapi_module.update( dnsapi_data, dnsapi_domain_data, key_data, args.log_debug )
-                if not sts:
-                    logging.error( "Error updating record for %s with key %s via %s API",
-                                    item[0], item[1], dnsapi_name )
+                if args.cleanup_files:
+                    # Clean up old records
+                    removed_count = 0
+                    new_update_data = []
+                    for record in update_data:
+                        if record[0] == item[0] and record[2] < cutoff:
+                            if removed_count == 0:
+                                logging.info("Removing old records for %s", item[0])
+                            removed_count += 1
+                            logging.info("Removing %s:%s created at %s", record[0], record[1],
+                                         record[2].strftime('%Y-%m-%d %H:%M:%S'))
+                            result = dnsapi_module.delete(dnsapi_data, dnsapi_domain_data, record, args.log_debug)
+                            if not result:
+                                logging.error("Error removing old record for %s:%s via %s API",
+                                              record[0], record[1], dnsapi_name)
+                                # Preserve record if we encountered an error
+                                new_update_data.append(record)
+                        else:
+                            new_update_data.append(record)
+                    update_data = new_update_data
+                # Add new record
+                logging.info("Updating selector %s for %s with key %s", key_data['selector'], item[0], item[1])
+                result = dnsapi_module.add(dnsapi_data, dnsapi_domain_data, key_data, args.log_debug)
+                sts = result[0]
+                if sts:
+                    logging.info("Update succeeded.")
+                if not args.log_debug:
+                    records = list(result[1:])
+                    if update_data is None:
+                        update_data = []
+                    update_data.append(records)
+                else:
+                    logging.error("Error adding new record for %s with key %s via %s API",
+                                  item[0], item[1], dnsapi_name)
 
-sys.exit( 0 )
+    if update_data is not None:
+        write_ini_file(dns_update_data_filename, update_data)
+
+        if args.cleanup_files:
+            target_list = []
+            # Find all files that match the name pattern for one of our domain name abbreviations
+            for target in key_names:
+                target_list += glob.glob(target + '.*.key') + glob.glob(target + '.*.txt')
+            # Go through the update data and remove the entries from target_list that're still referred
+            # to by an update_data item.
+            for item in update_data:
+                domain_key = find_key_for_domain(domain_data, item[0])
+                if domain_key is not None:
+                    for suffix in ['.key', '.txt']:
+                        item_str = domain_key + '.' + item[1] + suffix
+                        try:
+                            i = target_list.index(item_str)
+                        except:
+                            i = -1
+                        if i >= 0:
+                            del target_list[i]
+            # What's left in target_list are just the files that aren't referred to anymore and are
+            # eligible for being deleted.
+            for filename in target_list:
+                logging.info("Removing obsolete file %s", filename)
+                try:
+                    os.remove(filename)
+                except:
+                    logging.warning("Failed removing obsolete file %s", filename)
+
+sys.exit(0)
