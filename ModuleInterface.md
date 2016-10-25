@@ -52,4 +52,6 @@ TXT records for the same selector value.
 
 **Return value**
 
-True or False depending on whether the operation succeeded or failed.
+True or False depending on whether the operation succeeded or failed. If the API module doesn't
+support the delete operation, None may be returned which causes `genkeys.py` to retain the
+update data and related files and print an informational message rather than an error.

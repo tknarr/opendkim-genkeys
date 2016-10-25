@@ -138,7 +138,11 @@ when they're just synonyms for each other) might both reasonably use key `exampl
 
 This file records information about the records created for each domain where DNS
 servers were updated. If it doesn't exist, it will be created (warning messages will
-be issued, but they're strictly because a template file should have existed). 
+be issued, but they're strictly because a template file should have existed).
+
+An example file is provided purely for informational purposes. It's best to delete
+it before using the package, allow `genkeys.py` to create it from scratch during the
+first run.
 
 ## Private and public key files
 
@@ -199,6 +203,9 @@ Edit `dnsapi.ini` and `domains.ini` and enter the information for your accounts
 and domains at your DNS service providers. If you have domains at DNS service providers
 that aren't supported by the program, leave the DNS API information in `domains.ini`
 blank for them and keys will be generated so you can set the TXT records manually.
+You can delete the `dnsapi.ini` entries for services that you don't use if you wish,
+but make sure to retain the `null` API entry because it's used implicitly for domains
+hosted on services that don't use a supported API.
 
 Once the two configuration files are set up, you just run `genkeys.py` with the `-n`
 option at the end of the month. That will generate new private and public key files

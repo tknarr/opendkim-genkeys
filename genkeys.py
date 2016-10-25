@@ -326,12 +326,19 @@ if dnsapi_data is None and should_update_dns:
 else:
     for item in dnsapi_data:
         dnsapi_info[item[0]] = item[1:len(item)]
+# Insure we have the null API
+if dnsapi_info['null'] is None:
+    dnsapi_info['null'] = []
 
 # Process domains.ini
 domain_data = process_ini_file(domain_filename)
 if domain_data is None:
     logging.critical("No domain definitions found in %s", domain_filename)
     sys.exit(1)
+# Make all domains with no API specified use the null API
+for item in domain_data:
+    if len(item) < 3 or item[2] is None:
+        item[2] = 'null'
 # We'll need a list of all the key names used by domains
 key_names = []
 for item in domain_data:
@@ -414,7 +421,7 @@ if should_update_dns:
             if dnsapi_module is not None and dnsapi_data is not None and key_data is not None:
                 key_data['domain'] = item[0]
                 key_data['dnsapi'] = dnsapi_name
-                if args.cleanup_files:
+                if args.cleanup_files and update_data is not None:
                     # Clean up old records
                     removed_count = 0
                     new_update_data = []
@@ -423,10 +430,16 @@ if should_update_dns:
                             if removed_count == 0:
                                 logging.info("Removing old records for %s", item[0])
                             removed_count += 1
-                            logging.info("Removing %s:%s created at %s", record[0], record[1],
-                                         record[2].strftime('%Y-%m-%d %H:%M:%S'))
                             result = dnsapi_module.delete(dnsapi_data, dnsapi_domain_data, record, args.log_debug)
-                            if not result:
+                            if result is None:
+                                logging.info("No support for removing old record for %s:%s via %s API",
+                                             record[0], record[1], dnsapi_name)
+                                # Preserve record if we encountered an error
+                                new_update_data.append(record)
+                            elif result:
+                                logging.info("Removing %s:%s created at %s", record[0], record[1],
+                                             record[2].strftime('%Y-%m-%d %H:%M:%S'))
+                            else:
                                 logging.error("Error removing old record for %s:%s via %s API",
                                               record[0], record[1], dnsapi_name)
                                 # Preserve record if we encountered an error
@@ -460,6 +473,8 @@ if should_update_dns:
             # Go through the update data and remove the entries from target_list that're still referred
             # to by an update_data item.
             for item in update_data:
+                if len(item) < 2:
+                    continue
                 domain_key = find_key_for_domain(domain_data, item[0])
                 if domain_key is not None:
                     for suffix in ['.key', '.txt']:

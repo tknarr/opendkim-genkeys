@@ -104,7 +104,7 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
 
 def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
     # TODO delete record
-    return False
+    return None
 
 
 def extract_record_id(form_string, record_name):
