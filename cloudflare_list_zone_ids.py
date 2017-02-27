@@ -62,9 +62,9 @@ while current_page < total_pages:
     except CloudFlare.exceptions.CloudFlareAPIError as e:
         if len(e) > 0:
             for ex in e:
-                logging.error('Cloudflare API Error: [%d] %s', e, e)
+                logging.error('Cloudflare API: [%d] %s', ex, ex)
         else:
-            logging.error('Cloudflare API Error: [%d] %s', e, e)
+            logging.error('Cloudflare API: [%d] %s', e, e)
         sys.exit(1)
 
     result_info = response['result_info']
