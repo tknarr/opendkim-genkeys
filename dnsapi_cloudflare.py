@@ -29,6 +29,7 @@
 # content : key_data['plain']
 # ttl     : dnsapi_domain_data[1]
 
+import datetime
 import logging
 
 import CloudFlare
@@ -61,7 +62,7 @@ def update(dnsapi_data, dnsapi_domain_data, key_data, debugging=False):
         logging.error("DNS API Cloudflare: required information not present: %s", str(e))
         return False
     if debugging:
-        return True
+        return True, key_data['domain'], selector
 
     cf = CloudFlare.CloudFlare(email=email, token=api_key, debug=debugging)
 
@@ -85,3 +86,8 @@ def update(dnsapi_data, dnsapi_domain_data, key_data, debugging=False):
             logging.error('DNS API Cloudflare: [%d] %s', e, e)
 
     return result
+
+
+def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
+    # TODO delete record
+    return None
