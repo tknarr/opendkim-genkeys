@@ -38,12 +38,12 @@ import CloudFlare
 def update(dnsapi_data, dnsapi_domain_data, key_data, debugging=False):
     if len(dnsapi_data) < 2:
         logging.error("DNS API Cloudflare: API credentials not configured")
-        return False;
+        return False,
     api_key = dnsapi_data[0]
     email = dnsapi_data[1]
     if len(dnsapi_domain_data) < 1:
         logging.error("DNS API Cloudflare: domain data does not contain zone ID")
-        return False
+        return False,
     zone_id = dnsapi_domain_data[0]
     if len(dnsapi_domain_data) > 1:
         try:
@@ -60,7 +60,7 @@ def update(dnsapi_data, dnsapi_domain_data, key_data, debugging=False):
         domain_suffix = key_data['domain']
     except KeyError as e:
         logging.error("DNS API Cloudflare: required information not present: %s", str(e))
-        return False
+        return False,
     if debugging:
         return True, key_data['domain'], selector
 
@@ -76,7 +76,10 @@ def update(dnsapi_data, dnsapi_domain_data, key_data, debugging=False):
     try:
         response = cf.zones.dns_records.post(zone_id, data=request_params)
         if response:
-            result = True
+            # TODO need resource ID appended to result
+            result = True, key_data['domain'], selector, datetime.datetime.utcnow()
+        else:
+            result = False,
     except CloudFlare.exceptions.CloudFlareAPIError as e:
         result = False
         if len(e) > 0:
