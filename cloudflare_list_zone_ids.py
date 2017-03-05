@@ -20,28 +20,27 @@
 import argparse
 import logging
 import sys
-import CloudFlare
+
+import requests
 
 # Set up command-line argument parser and parse arguments
-parser = argparse.ArgumentParser(description="List CloudFlare zones and zone IDs")
-parser.add_argument("api_key", help="Global API key")
-parser.add_argument("email", help="Account email address")
-parser.add_argument("domain", nargs='?', default=None, help="Domain to request ID for")
+parser = argparse.ArgumentParser(description = "List CloudFlare zones and zone IDs")
+parser.add_argument("api_key", help = "Global API key")
+parser.add_argument("email", help = "Account email address")
+parser.add_argument("domain", nargs = '?', default = None, help = "Domain to request ID for")
 args = parser.parse_args()
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logging.basicConfig(level = logging.INFO, format = "%(levelname)s: %(message)s")
 
 api_key = args.api_key
 email = args.email
-if api_key == None:
+if api_key is None:
     logging.error("API key and email address are required.")
     sys.exit(1)
-elif email == None:
+elif email is None:
     logging.error("Email address is required.")
     sys.exit(1)
 domain = args.domain
-
-cf = CloudFlare.CloudFlare(email=email, token=api_key, raw=True)
 
 zones = []
 current_page = 0
@@ -49,32 +48,39 @@ total_pages = 1
 
 while current_page < total_pages:
 
+    result = False
     current_page += 1
     logging.info("Retrieving page %d of %d", current_page, total_pages)
-
-    request_params = {'per_page': 50, 'page': current_page, 'order': 'name', 'direction': 'asc'}
+    endpoint = "https://api.cloudflare.com/client/v4/zones?page={0}&order=name&direction=asc".format(current_page)
     if domain:
-        request_params['name'] = domain
+        endpoint = endpoint + "&name={0}".format(domain)
+    hdr = {'Content-Type': 'application/json',
+           'X-Auth-Key':   api_key,
+           'X-Auth-Email': email
+           }
+    resp = requests.get(endpoint, headers = hdr)
+    logging.info("HTTP status: %d", resp.status_code)
+    result = resp.json()
+    success = result['success']
+    errors = result['errors']
+    messages = result['messages']
+    result_info = result['result_info']
+    results = result['result']
 
-    try:
-        response = cf.zones.get(params=request_params)
-    except CloudFlare.exceptions.CloudFlareAPIError as e:
-        if len(e) > 0:
-            for ex in e:
-                logging.error('Cloudflare API: [%d] %s', ex, ex)
-        else:
-            logging.error('Cloudflare API: [%d] %s', e, e)
-        sys.exit(1)
+    if not success:
+        logging.info("Operation failed.")
+    for item in errors:
+        logging.error(str(item))
+    for item in messages:
+        logging.warning(str(item))
 
-    result_info = response['result_info']
-
-    for zone in response['result']:
-        zones.append((zone['id'], zone['name']))
+    for item in results:
+        zones.append((item['id'], item['name']))
 
     current_page = result_info['page']
     total_pages = result_info['total_pages']
 
 for id, name in zones:
-    print("{0}\t{1}".format(id, name))
+    print "{0}\t{1}".format(id, name)
 
 sys.exit(0)
