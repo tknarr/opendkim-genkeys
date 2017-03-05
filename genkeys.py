@@ -342,10 +342,11 @@ for target in key_names:
     keys[target] = key_data
 # That also gives us the private key and public key txt files needed
 
-# Read contents of existing key and signing table files in case we need to leave existing
+# Read contents of existing key table file in case we need to leave existing
 # lines in place because of a DNS update failure
 key_table_data = process_ini_file("key.table", False)
-signing_table_data = process_ini_file("signing.table", False)
+if key_table_data == None:
+    key_table_data = []
 # Generate the key.table and signing.table files
 try:
     key_table_file = open("key.table", 'w')
@@ -354,8 +355,8 @@ except IOError as e:
     logging.critical("Error creating new key or signing table file")
     logging.error("%s", str(e))
     sys.exit(1)
+# Now write the updated lines to the files
 for item in domain_data:
-    # TODO Don't remove entries for domains that failed DNS update, leave the existing line in place
     code = item[0].replace('.', '-')
     try:
         key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
@@ -461,6 +462,7 @@ if should_update_dns:
                 target_list += glob.glob(target + '.*.key') + glob.glob(target + '.*.txt')
             # Go through the update data and remove the entries from target_list that're still referred
             # to by an update_data item.
+            # TODO Account for items where the DNS update failed
             for item in update_data:
                 if len(item) < 2:
                     continue
