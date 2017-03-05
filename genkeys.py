@@ -160,30 +160,11 @@ def gen_key(target_name, selector, find_unused_selector=False):
     return {'selector': real_selector, 'plain': value, 'chunked': chunked_value}
 
 
-def split_ini_line(linetext):
-    l = linetext.split()
-    if len(l) == 0 or len(l[0]) == 0 or l[0][0] == '#':
-        return None
-    return l
-
-
-def split_ini_file(filetext):
-    lines = filetext.splitlines()
-    l = []
-    for line in lines:
-        if len(line) > 0:
-            fields = split_ini_line(line)
-            if fields is not None:
-                l.append(fields)
-    if len(l) == 0:
-        return None
-    return l
-
-
 def process_ini_file(filename, critical=True):
     # Snarf in the contents
     try:
         ini_file = open(filename, 'r')
+        input_lines = ini_file.readlines()
     except IOError as e:
         if critical:
             logging.critical("Error accessing file %s", filename)
@@ -192,11 +173,24 @@ def process_ini_file(filename, critical=True):
             logging.warning("Error accessing file %s", filename)
             logging.warning("%s", str(e))
         return None
-    input_text = ini_file.read()
-    ini_file.close()
-
-    ini_data = split_ini_file(input_text)
+    ini_data = []
+    for line in input_lines:
+        fields = line.split()
+        if fields != None and len(fields) > 0 and len(fields[0]) > 0 and fields[0][0] != '#':
+            ini_data.append(fields)
     return ini_data
+
+
+def fields_to_line(fields):
+    line = ""
+    for field in fields:
+        if len(line) > 0:
+            line += '\t'
+        if isinstance(field, datetime.datetime):
+            line += field.strftime('%Y-%m-%dT%H:%M:%S')
+        else:
+            line += str(field)
+    return line
 
 
 def write_ini_file(filename, records):
@@ -207,15 +201,7 @@ def write_ini_file(filename, records):
         logging.error("%s", str(e))
         return
     for record in records:
-        line = ""
-        for field in record:
-            if len(line) > 0:
-                line += '\t'
-            if isinstance(field, datetime.datetime):
-                line += field.strftime('%Y-%m-%dT%H:%M:%S')
-            else:
-                line += str(field)
-        line += '\n'
+        line = fields_to_line(record) +'\n'
         ini_file.write(line)
     ini_file.close()
     return
@@ -250,23 +236,23 @@ def find_dnsapi_modules(pn):
 # Set up command-line argument parser and parse arguments
 parser = argparse.ArgumentParser(description="Generate OpenDKIM key data for a set of domains")
 parser.add_argument("-v", "--verbose", dest='log_info', action='store_true',
-                    help="Log informational messages in addition to errors")
+    help="Log informational messages in addition to errors")
 parser.add_argument("-n", "--next-month", dest='next_month', action='store_true',
-                    help="Use next month's date for automatically-generated selectors")
+    help="Use next month's date for automatically-generated selectors")
 parser.add_argument("-a", "--avoid-overwrite", dest='avoid_collisions', action='store_true',
-                    help="Add a suffix to the selector if needed to avoid overwriting existing files")
+    help="Add a suffix to the selector if needed to avoid overwriting existing files")
 parser.add_argument("-s", "--selector", dest='output_selector', action='store_true',
-                    help="Causes the generated selector to be output")
+    help="Causes the generated selector to be output")
 parser.add_argument("--no-dns", dest='update_dns', action='store_false',
-                    help="Do not update DNS data")
+    help="Do not update DNS data")
 parser.add_argument("--no-cleanup", dest='cleanup_files', action='store_false',
-                    help="Do not delete old key files")
+    help="Do not delete old key files")
 parser.add_argument("--debug", dest='log_debug', action='store_true',
-                    help="Log debugging info and do not update DNS")
+    help="Log debugging info and do not update DNS")
 parser.add_argument("--use-null", dest='use_null_dnsapi', action='store_true',
-                    help="Silently use the null DNS API instead of the real API")
+    help="Silently use the null DNS API instead of the real API")
 parser.add_argument("--version", dest='display_version', action='store_true',
-                    help="Display the program version")
+    help="Display the program version")
 parser.add_argument("selector", nargs='?', default=None, help="Selector to use")
 args = parser.parse_args()
 
@@ -356,22 +342,27 @@ for target in key_names:
     keys[target] = key_data
 # That also gives us the private key and public key txt files needed
 
+# Read contents of existing key and signing table files in case we need to leave existing
+# lines in place because of a DNS update failure
+key_table_data = process_ini_file("key.table", False)
+signing_table_data = process_ini_file("signing.table", False)
 # Generate the key.table and signing.table files
 try:
     key_table_file = open("key.table", 'w')
     signing_table_file = open("signing.table", 'w')
 except IOError as e:
-    logging.critical("Error creating key or signing table file")
+    logging.critical("Error creating new key or signing table file")
     logging.error("%s", str(e))
     sys.exit(1)
 for item in domain_data:
+    # TODO Don't remove entries for domains that failed DNS update, leave the existing line in place
     code = item[0].replace('.', '-')
     try:
         key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
                              (code, item[0], selector, opendkim_dir, item[1], selector))
         signing_table_file.write("*@%s\t%s\n" % (item[0], code))
     except IOError as e:
-        logging.critical("Error creating key or signing table file")
+        logging.critical("Error writing new key or signing table file")
         logging.error("%s", str(e))
         sys.exit(1)
 key_table_file.close()
@@ -433,15 +424,15 @@ if should_update_dns:
                             result = dnsapi_module.delete(dnsapi_data, dnsapi_domain_data, record, args.log_debug)
                             if result is None:
                                 logging.info("No support for removing old record for %s:%s via %s API",
-                                             record[0], record[1], dnsapi_name)
+                                    record[0], record[1], dnsapi_name)
                                 # Preserve record if we encountered an error
                                 new_update_data.append(record)
                             elif result:
                                 logging.info("Removing %s:%s created at %s", record[0], record[1],
-                                             record[2].strftime('%Y-%m-%d %H:%M:%S'))
+                                    record[2].strftime('%Y-%m-%d %H:%M:%S'))
                             else:
                                 logging.error("Error removing old record for %s:%s via %s API",
-                                              record[0], record[1], dnsapi_name)
+                                    record[0], record[1], dnsapi_name)
                                 # Preserve record if we encountered an error
                                 new_update_data.append(record)
                         else:
@@ -450,17 +441,15 @@ if should_update_dns:
                 # Add new record
                 logging.info("Updating selector %s for %s with key %s", key_data['selector'], item[0], item[1])
                 result = dnsapi_module.add(dnsapi_data, dnsapi_domain_data, key_data, args.log_debug)
-                sts = result[0]
-                if sts:
+                if result[0]:
                     logging.info("Update succeeded.")
-                if not args.log_debug:
                     records = list(result[1:])
                     if update_data is None:
                         update_data = []
                     update_data.append(records)
                 else:
                     logging.error("Error adding new record for %s with key %s via %s API",
-                                  item[0], item[1], dnsapi_name)
+                        item[0], item[1], dnsapi_name)
 
     if update_data is not None:
         write_ini_file(dns_update_data_filename, update_data)
