@@ -342,32 +342,14 @@ for target in key_names:
     keys[target] = key_data
 # That also gives us the private key and public key txt files needed
 
-# Read contents of existing key table file in case we need to leave existing
+# Read contents of existing key and signing table files in case we need to leave existing
 # lines in place because of a DNS update failure
 key_table_data = process_ini_file("key.table", False)
 if key_table_data == None:
     key_table_data = []
-# Generate the key.table and signing.table files
-try:
-    key_table_file = open("key.table", 'w')
-    signing_table_file = open("signing.table", 'w')
-except IOError as e:
-    logging.critical("Error creating new key or signing table file")
-    logging.error("%s", str(e))
-    sys.exit(1)
-# Now write the updated lines to the files
-for item in domain_data:
-    code = item[0].replace('.', '-')
-    try:
-        key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
-                             (code, item[0], selector, opendkim_dir, item[1], selector))
-        signing_table_file.write("*@%s\t%s\n" % (item[0], code))
-    except IOError as e:
-        logging.critical("Error writing new key or signing table file")
-        logging.error("%s", str(e))
-        sys.exit(1)
-key_table_file.close()
-signing_table_file.close()
+signing_table_data = process_ini_file("signing.table", False)
+if signing_table_data == None:
+    signing_table_data = []
 
 # Check for our DNS API modules. If we don't have any, there's no sense in
 # trying to do automatic updating even if we're supposed to.
@@ -484,5 +466,28 @@ if should_update_dns:
                     os.remove(filename)
                 except:
                     logging.warning("Failed removing obsolete file %s", filename)
+
+# Generate the key.table and signing.table files
+try:
+    key_table_file = open("key.table", 'w')
+    signing_table_file = open("signing.table", 'w')
+except IOError as e:
+    logging.critical("Error creating new key or signing table file")
+    logging.error("%s", str(e))
+    sys.exit(1)
+# TODO Write the unupdated entries back to the files
+# Now write the updated lines to the files
+for item in domain_data:
+    code = item[0].replace('.', '-')
+    try:
+        key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
+                             (code, item[0], selector, opendkim_dir, item[1], selector))
+        signing_table_file.write("*@%s\t%s\n" % (item[0], code))
+    except IOError as e:
+        logging.critical("Error writing new key or signing table file")
+        logging.error("%s", str(e))
+        sys.exit(1)
+key_table_file.close()
+signing_table_file.close()
 
 sys.exit(0)
