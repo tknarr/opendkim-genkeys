@@ -254,6 +254,7 @@ parser.add_argument("--use-null", dest='use_null_dnsapi', action='store_true',
 parser.add_argument("--version", dest='display_version', action='store_true',
     help="Display the program version")
 parser.add_argument("selector", nargs='?', default=None, help="Selector to use")
+#parser.add_argument("domains", nargs=argparse.REMAINDER, help="List of domains to process")
 args = parser.parse_args()
 
 if args.display_version:
@@ -342,14 +343,11 @@ for target in key_names:
     keys[target] = key_data
 # That also gives us the private key and public key txt files needed
 
-# Read contents of existing key and signing table files in case we need to leave existing
+# Read contents of the existing key table file in case we need to leave existing
 # lines in place because of a DNS update failure
 key_table_data = process_ini_file("key.table", False)
 if key_table_data == None:
     key_table_data = []
-signing_table_data = process_ini_file("signing.table", False)
-if signing_table_data == None:
-    signing_table_data = []
 
 # Check for our DNS API modules. If we don't have any, there's no sense in
 # trying to do automatic updating even if we're supposed to.
@@ -375,6 +373,7 @@ if should_update_dns:
     # rotation is in use.
     cutoff_delta = datetime.timedelta(70)
     cutoff = datetime.datetime.now() - cutoff_delta
+    failed_domains = []
     for item in domain_data:
         if len(item) > 2:
             dnsapi_name = item[2]
@@ -433,6 +432,7 @@ if should_update_dns:
                 else:
                     logging.error("Error adding new record for %s with key %s via %s API",
                         item[0], item[1], dnsapi_name)
+                    failed_domains.append(item[0])
 
     if update_data is not None:
         write_ini_file(dns_update_data_filename, update_data)
@@ -444,7 +444,6 @@ if should_update_dns:
                 target_list += glob.glob(target + '.*.key') + glob.glob(target + '.*.txt')
             # Go through the update data and remove the entries from target_list that're still referred
             # to by an update_data item.
-            # TODO Account for items where the DNS update failed
             for item in update_data:
                 if len(item) < 2:
                     continue
@@ -458,6 +457,12 @@ if should_update_dns:
                             i = -1
                         if i >= 0:
                             del target_list[i]
+            # Don't clean entries for domains that failed the DNS update
+            for item in failed_domains:
+                domain_key = find_key_for_domain(domain_data, item)
+                if domain_key is not None:
+                    new_list = [x for x in target_list if x.startswith(domain_key + '.')]
+                    target_list = new_list
             # What's left in target_list are just the files that aren't referred to anymore and are
             # eligible for being deleted.
             for filename in target_list:
@@ -468,6 +473,7 @@ if should_update_dns:
                     logging.warning("Failed removing obsolete file %s", filename)
 
 # Generate the key.table and signing.table files
+logging.info("Generating key and signing tables")
 try:
     key_table_file = open("key.table", 'w')
     signing_table_file = open("signing.table", 'w')
@@ -475,10 +481,23 @@ except IOError as e:
     logging.critical("Error creating new key or signing table file")
     logging.error("%s", str(e))
     sys.exit(1)
-# TODO Write the unupdated entries back to the files
+# Write the unupdated entries back to the files
+for key_item in key_table_data:
+    key_domain = key_item[1].split(':')[0]
+    failed_item = [x for x in failed_domains if x == key_domain]
+    if failed_item is not None:
+        logging.info("Preserving entries for %s", key_domain)
+        try:
+            key_table_file.write("%s\n" % (fields_to_line(key_item)))
+            signing_table_file.write("*@%s\t%s\n" % (key_domain, key_item[0]))
+        except IOError as e:
+            logging.critical("Error writing new key or signing table file")
+            logging.error("%s", str(e))
+            sys.exit(1)
 # Now write the updated lines to the files
 for item in domain_data:
     code = item[0].replace('.', '-')
+    logging.info("Adding entries for %s", item[0])
     try:
         key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
                              (code, item[0], selector, opendkim_dir, item[1], selector))
