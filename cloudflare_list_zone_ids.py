@@ -81,6 +81,6 @@ while current_page < total_pages:
     total_pages = result_info['total_pages']
 
 for id, name in zones:
-    print "{0}\t{1}".format(id, name)
+    print( "{0}\t{1}".format(id, name) )
 
 sys.exit(0)

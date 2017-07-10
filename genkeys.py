@@ -258,7 +258,7 @@ parser.add_argument("selector", nargs='?', default=None, help="Selector to use")
 args = parser.parse_args()
 
 if args.display_version:
-    print "OpenDKIM genkeys.py v{0}".format(VERSION)
+    print( "OpenDKIM genkeys.py v{0}".format(VERSION) )
     sys.exit(0)
 
 if args.log_info:
@@ -297,7 +297,7 @@ if selector is None:
     selector = selector_date.strftime("%Y%m")
 logging.info("Selector: %s", selector)
 if should_output_selector:
-    print selector
+    print( selector )
     sys.exit(0)
 
 # Process dnsapi.ini
