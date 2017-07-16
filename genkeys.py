@@ -43,7 +43,7 @@ domain_filename = 'domains.ini'
 dns_api_defs_filename = 'dnsapi.ini'
 dns_update_data_filename = 'dns_update_data.ini'
 
-VERSION = '1.5.0'
+VERSION = '1.5.1'
 
 
 # Creates the private-key file, and the public-key txt-record file in chunked (BIND) form.
