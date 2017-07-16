@@ -41,7 +41,8 @@ OpenDKIM package before using this tool.
 
 ## Usage
 
-    genkeys.py [-v] [-n] [-a] [--no-dns] [--no-cleanup] [--debug] [--use-null] [selector]
+    genkeys.py [-v] [-n] [-a] [--no-dns] [--no-cleanup] [--debug] [--use-null]
+        [--working-dir <dir>] [selector]
     genkeys.py [-n] -s [selector]
     genkeys.py --help
     genkeys.py --version
@@ -51,6 +52,7 @@ OpenDKIM package before using this tool.
 *   `-n`, `--next-month`: Use next month's date for automatically-generated selectors
 *   `-a`, `--avoid-overwrite`: Add a suffix to the selector if needed to avoid overwriting existing files
 *   `-s`, `--selector`: Causes the generated selector to be output
+*   `--working_dir`: Sets the working directory for data files to the given directory
 *   `--no-dns`: Do not update DNS data
 *   `--no-cleanup`: Do not attempt to delete old key files
 *   `--debug`: Log debugging info and do not update DNS

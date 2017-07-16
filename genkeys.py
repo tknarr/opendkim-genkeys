@@ -32,6 +32,9 @@ import sys
 # Directory that OpenDKIM key files will be placed in on the mail server
 opendkim_dir = '/etc/opendkim/keys'
 
+# Working directory for data files
+working_dir = ''
+
 # Set this to True if you never want to have the script update DNS records for you
 never_update_dns = False
 
@@ -220,6 +223,9 @@ def find_dnsapi_modules(pn):
     # dnsapi_X (file will be dnsapi_X.py).
     dnsapis = {}
     possible_names = pn
+    # Make sure null is included
+    if 'null' not in possible_names:
+        possible_names.append('null')
     for api_name in possible_names:
         module_name = "dnsapi_" + api_name
         try:
@@ -244,6 +250,8 @@ parser.add_argument("-a", "--avoid-overwrite", dest='avoid_collisions', action='
     help="Add a suffix to the selector if needed to avoid overwriting existing files")
 parser.add_argument("-s", "--selector", dest='output_selector', action='store_true',
     help="Causes the generated selector to be output")
+parser.add_argument("--working-dir", dest='working_dir', action='store',
+    help="Set the working directory for DKIM data files")
 parser.add_argument("--no-dns", dest='update_dns', action='store_false',
     help="Do not update DNS data")
 parser.add_argument("--no-cleanup", dest='cleanup_files', action='store_false',
@@ -279,6 +287,8 @@ if should_output_selector:
     level = logging.ERROR
 
 avoid_collisions = args.avoid_collisions
+if args.working_dir:
+    working_dir = args.working_dir
 
 logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
@@ -300,6 +310,11 @@ logging.info("Selector: %s", selector)
 if should_output_selector:
     print( selector )
     sys.exit(0)
+
+# Set working directory
+if working_dir:
+    logging.info("Setting working directory to %s", working_dir)
+    os.chdir(working_dir)
 
 # Process dnsapi.ini
 # If we're supposed to update DNS records but don't have any definitions for
@@ -381,7 +396,10 @@ if should_update_dns:
             dnsapi_domain_data = item[3:len(item)]
             try:
                 if args.use_null_dnsapi:
-                    dnsapi_module = dnsapis['null']
+                    if dnsapi_name == 'fail':
+                        dnsapi_module = dnsapis[dnsapi_name]
+                    else:
+                        dnsapi_module = dnsapis['null']
                 else:
                     dnsapi_module = dnsapis[dnsapi_name]
                 dnsapi_data = dnsapi_info[dnsapi_name]
@@ -462,7 +480,7 @@ if should_update_dns:
             for item in failed_domains:
                 domain_key = find_key_for_domain(domain_data, item)
                 if domain_key is not None:
-                    new_list = [x for x in target_list if x.startswith(domain_key + '.')]
+                    new_list = [x for x in target_list if not x.startswith(domain_key + '.')]
                     target_list = new_list
             # What's left in target_list are just the files that aren't referred to anymore and are
             # eligible for being deleted.
@@ -485,8 +503,7 @@ except IOError as e:
 # Write the unupdated entries back to the files
 for key_item in key_table_data:
     key_domain = key_item[1].split(':')[0]
-    failed_item = [x for x in failed_domains if x == key_domain]
-    if failed_item is not None:
+    if key_domain in failed_domains:
         logging.info("Preserving entries for %s", key_domain)
         try:
             key_table_file.write("%s\n" % (fields_to_line(key_item)))
@@ -497,16 +514,17 @@ for key_item in key_table_data:
             sys.exit(1)
 # Now write the updated lines to the files
 for item in domain_data:
-    code = item[0].replace('.', '-')
-    logging.info("Adding entries for %s", item[0])
-    try:
-        key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
-                             (code, item[0], selector, opendkim_dir, item[1], selector))
-        signing_table_file.write("*@%s\t%s\n" % (item[0], code))
-    except IOError as e:
-        logging.critical("Error writing new key or signing table file")
-        logging.error("%s", str(e))
-        sys.exit(1)
+    if item[0] not in failed_domains:
+        code = item[0].replace('.', '-')
+        logging.info("Adding entries for %s", item[0])
+        try:
+            key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
+                                 (code, item[0], selector, opendkim_dir, item[1], selector))
+            signing_table_file.write("*@%s\t%s\n" % (item[0], code))
+        except IOError as e:
+            logging.critical("Error writing new key or signing table file")
+            logging.error("%s", str(e))
+            sys.exit(1)
 key_table_file.close()
 signing_table_file.close()
 
