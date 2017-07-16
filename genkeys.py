@@ -227,6 +227,7 @@ def find_dnsapi_modules(pn):
         except ImportError as e:
             module = None
             logging.error("Module %s for DNS API %s not found", module_name, api_name)
+            logging.info("%s", str(e))
         if module is not None:
             logging.debug("DNS API module %s loaded", api_name)
             dnsapis[api_name] = module
