@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 #    OpenDKIM genkeys tool, dummy API module for testing
-#    Copyright (C) 2016 Todd Knarr <tknarr@silverglass.org>
+#    Copyright (C) 2017 Todd Knarr <tknarr@silverglass.org>
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -18,6 +18,10 @@
 
 # Requires:
 # Nothing
+
+# To use this module, add a 'fail' entry to dnsapi.ini. You can list the methods that
+# should fail ('add', 'delete') as keywords after the 'fail'. By default all methods
+# will fail.
 
 import datetime
 import logging
@@ -36,9 +40,14 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
         logging.debug("    key data   :")
         for key, value in key_data.iteritems():
             logging.debug('        %s: %s', key, value)
-    return True, key_data['domain'], key_data['selector'], datetime.datetime.utcnow(), '-'
+    if len(dnsapi_data) == 0 or 'add' in dnsapi_data:
+        return False,
+    else:
+        return True, key_data['domain'], key_data['selector'], datetime.datetime.utcnow(), '-'
 
 
 def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
-    # Nothing to do for this API
-    return True
+    if len(dnsapi_data) == 0 or 'delete' in dnsapi_data:
+        return False
+    else:
+        return True
