@@ -52,65 +52,66 @@ import requests
 import w3lib.html
 
 
-def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
-    if len(dnsapi_data) < 1:
-        logging.error("DNS API freedns: authentication cookie not configured")
+def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
+    if len( dnsapi_data ) < 1:
+        logging.error( "DNS API freedns: authentication cookie not configured" )
         return False,
     cookie_value = dnsapi_data[0]
-    if len(dnsapi_domain_data) < 1:
-        logging.error("DNS API freedns: domain data does not contain domain ID")
+    if len( dnsapi_domain_data ) < 1:
+        logging.error( "DNS API freedns: domain data does not contain domain ID" )
         return False,
     domain_id = dnsapi_domain_data[0]
     try:
         selector = key_data['selector']
         data = key_data['chunked']
     except KeyError as e:
-        logging.error("DNS API freedns: required information not present: %s", str(e))
+        logging.error( "DNS API freedns: required information not present: %s", str( e ) )
         return False,
     if debugging:
         return True, key_data['domain'], selector
 
-    resp = requests.post('https://freedns.afraid.org/subdomain/save.php?step=2',
-                         data = {'type':      'TXT',
-                                 'subdomain': selector + '._domainkey',
-                                 'domain_id': domain_id,
-                                 'address':   data,
-                                 'ttl':       '',
-                                 'send':      'Save!'
-                                 },
-                         cookies = {'dns_cookie': cookie_value})
-    logging.info("HTTP status: %d", resp.status_code)
+    resp = requests.post( 'https://freedns.afraid.org/subdomain/save.php?step=2',
+                          data = {
+                              'type': 'TXT',
+                              'subdomain': selector + '._domainkey',
+                              'domain_id': domain_id,
+                              'address': data,
+                              'ttl': '',
+                              'send': 'Save!'
+                          },
+                          cookies = { 'dns_cookie': cookie_value } )
+    logging.info( "HTTP status: %d", resp.status_code )
 
     if resp.status_code == requests.codes.ok:
-        form_start = resp.text.find('<form action=delete2.php>')
+        form_start = resp.text.find( '<form action=delete2.php>' )
         if form_start >= 0:
-            form_end = resp.text.find('</form>', form_start)
-            form_string = w3lib.html.replace_entities(resp.text[form_start: form_end + 6])
+            form_end = resp.text.find( '</form>', form_start )
+            form_string = w3lib.html.replace_entities( resp.text[form_start: form_end + 6] )
         else:
             form_string = ''
-        record_id = extract_record_id(form_string, selector + '._domainkey.' + key_data['domain'])
+        record_id = extract_record_id( form_string, selector + '._domainkey.' + key_data['domain'] )
         if record_id is None:
-            logging.error("DNS API freedns: could not locate record ID in subdomains page")
+            logging.error( "DNS API freedns: could not locate record ID in subdomains page" )
             result = False,
         else:
             result = True, key_data['domain'], selector, datetime.datetime.utcnow(), record_id
     else:
         result = False,
-        logging.error("DNS API freedns: HTTP error %d", resp.status_code)
-        logging.error("DNS API freedns: error response body:\n%s", resp.text)
+        logging.error( "DNS API freedns: HTTP error %d", resp.status_code )
+        logging.error( "DNS API freedns: error response body:\n%s", resp.text )
 
     return result
 
 
-def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
+def delete( dnsapi_data, dnsapi_domain_data, record_data, debugging = False ):
     # TODO delete record
     return None
 
 
-def extract_record_id(form_string, record_name):
-    match = re.search('<a href=edit.php\?data_id=([0-9]+)>' + record_name + '</a>', form_string)
+def extract_record_id( form_string, record_name ):
+    match = re.search( '<a href=edit.php\?data_id=([0-9]+)>' + record_name + '</a>', form_string )
     if match:
-        result = match.group(1)
+        result = match.group( 1 )
     else:
         result = None
     return result

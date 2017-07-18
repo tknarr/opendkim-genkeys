@@ -39,55 +39,56 @@ import logging
 import requests
 
 
-def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
-    if len(dnsapi_data) < 1:
-        logging.error("DNS API linode: API key not configured")
+def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
+    if len( dnsapi_data ) < 1:
+        logging.error( "DNS API linode: API key not configured" )
         return False,
     api_key = dnsapi_data[0]
-    if len(dnsapi_domain_data) < 1:
-        logging.error("DNS API linode: domain data does not contain domain ID")
+    if len( dnsapi_domain_data ) < 1:
+        logging.error( "DNS API linode: domain data does not contain domain ID" )
         return False,
     domain_id = dnsapi_domain_data[0]
     try:
         selector = key_data['selector']
         data = key_data['plain']
     except KeyError as e:
-        logging.error("DNS API linode: required information not present: %s", str(e))
+        logging.error( "DNS API linode: required information not present: %s", str( e ) )
         return False,
     if debugging:
         return True,
 
-    resp = requests.post("https://api.linode.com/",
-                         data = {'api_key':    api_key,
-                                 'api_action': 'domain.resource.create',
-                                 'DomainID':   domain_id,
-                                 'Type':       'TXT',
-                                 'Name':       selector + "._domainkey",
-                                 'Target':     data
-                                 })
-    logging.info("HTTP status: %d", resp.status_code)
+    resp = requests.post( "https://api.linode.com/",
+                          data = {
+                              'api_key': api_key,
+                              'api_action': 'domain.resource.create',
+                              'DomainID': domain_id,
+                              'Type': 'TXT',
+                              'Name': selector + "._domainkey",
+                              'Target': data
+                          } )
+    logging.info( "HTTP status: %d", resp.status_code )
 
     if resp.status_code == requests.codes.ok:
         error_array = resp.json()['ERRORARRAY']
-        if len(error_array) > 0:
+        if len( error_array ) > 0:
             result = False,
             for error in error_array:
-                logging.error("DNS API linode: error %d: %s", error['ERRORCODE'], error['ERRORMESSAGE'])
+                logging.error( "DNS API linode: error %d: %s", error['ERRORCODE'], error['ERRORMESSAGE'] )
         else:
             data = resp.json()['DATA']
             if data:
                 result = True, key_data['domain'], selector, datetime.datetime.utcnow(), data['ResourceID']
             else:
-                logging.error("DNS API linode: could not locate data in response")
+                logging.error( "DNS API linode: could not locate data in response" )
                 result = False,
     else:
         result = False,
-        logging.error("DNS API linode: HTTP error %d", resp.status_code)
-        logging.error("DNS API linode: error response body:\n%s", resp.text)
+        logging.error( "DNS API linode: HTTP error %d", resp.status_code )
+        logging.error( "DNS API linode: error response body:\n%s", resp.text )
 
     return result
 
 
-def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
+def delete( dnsapi_data, dnsapi_domain_data, record_data, debugging = False ):
     # TODO delete record
     return None

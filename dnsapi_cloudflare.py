@@ -39,19 +39,19 @@ import logging
 import requests
 
 
-def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
-    if len(dnsapi_data) < 2:
-        logging.error("DNS API cloudflare: API credentials not configured")
+def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
+    if len( dnsapi_data ) < 2:
+        logging.error( "DNS API cloudflare: API credentials not configured" )
         return False,
     api_key = dnsapi_data[0]
     email = dnsapi_data[1]
-    if len(dnsapi_domain_data) < 1:
-        logging.error("DNS API cloudflare: domain data does not contain zone ID")
+    if len( dnsapi_domain_data ) < 1:
+        logging.error( "DNS API cloudflare: domain data does not contain zone ID" )
         return False,
     zone_id = dnsapi_domain_data[0]
-    if len(dnsapi_domain_data) > 1:
+    if len( dnsapi_domain_data ) > 1:
         try:
-            ttl = int(dnsapi_domain_data[1])
+            ttl = int( dnsapi_domain_data[1] )
             if ttl < 1:
                 ttl = 1
         except Exception:
@@ -63,23 +63,25 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
         data = key_data['plain']
         domain_suffix = key_data['domain']
     except KeyError as e:
-        logging.error("DNS API cloudflare: required information not present: %s", str(e))
+        logging.error( "DNS API cloudflare: required information not present: %s", str( e ) )
         return False,
     if debugging:
         return True, key_data['domain'], selector
 
-    endpoint = "https://api.cloudflare.com/client/v4/zones/{0}/dns_records".format(zone_id)
-    hdr = {'Content-Type': 'application/json',
-           'X-Auth-Key':   api_key,
-           'X-Auth-Email': email
-           }
-    body = {'type':    'TXT',
-            'name':    selector + '._domainkey.' + domain_suffix,
-            'content': data,
-            'ttl':     ttl
-            }
-    resp = requests.post(endpoint, json = body, headers = hdr)
-    logging.info("HTTP status: %d", resp.status_code)
+    endpoint = "https://api.cloudflare.com/client/v4/zones/{0}/dns_records".format( zone_id )
+    hdr = {
+        'Content-Type': 'application/json',
+        'X-Auth-Key': api_key,
+        'X-Auth-Email': email
+    }
+    body = {
+        'type': 'TXT',
+        'name': selector + '._domainkey.' + domain_suffix,
+        'content': data,
+        'ttl': ttl
+    }
+    resp = requests.post( endpoint, json = body, headers = hdr )
+    logging.info( "HTTP status: %d", resp.status_code )
 
     if resp.status_code == requests.codes.ok:
         success = resp.json()['success']
@@ -88,19 +90,19 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
             if data:
                 result = True, key_data['domain'], selector, datetime.datetime.utcnow(), data['id']
             else:
-                logging.error("DNS API cloudflare: could not find result data in response")
+                logging.error( "DNS API cloudflare: could not find result data in response" )
                 result = False,
         else:
             result = False,
-            logging.error("DNS API cloudflare: failure:\n%s", resp.text)
+            logging.error( "DNS API cloudflare: failure:\n%s", resp.text )
     else:
         result = False,
-        logging.error("DNS API cloudflare: HTTP error %d", resp.status_code)
-        logging.error("DNS API cloudflare: error response body:\n%s", resp.text)
+        logging.error( "DNS API cloudflare: HTTP error %d", resp.status_code )
+        logging.error( "DNS API cloudflare: error response body:\n%s", resp.text )
 
     return result
 
 
-def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
+def delete( dnsapi_data, dnsapi_domain_data, record_data, debugging = False ):
     # TODO delete record
     return None

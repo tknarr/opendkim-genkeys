@@ -27,27 +27,27 @@ import datetime
 import logging
 
 
-def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
+def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     if debugging:
         try:
-            logging.debug("    DNS API %s", key_data['dnsapi'])
-            logging.debug("    selector: %s", key_data['selector'])
-            logging.debug("    domain  : %s", key_data['domain'])
+            logging.debug( "    DNS API %s", key_data['dnsapi'] )
+            logging.debug( "    selector: %s", key_data['selector'] )
+            logging.debug( "    domain  : %s", key_data['domain'] )
         except KeyError as e:
-            logging.debug("    required %s not found", str(e))
-        logging.debug("    global data: %s", str(dnsapi_data))
-        logging.debug("    domain data: %s", str(dnsapi_domain_data))
-        logging.debug("    key data   :")
+            logging.debug( "    required %s not found", str( e ) )
+        logging.debug( "    global data: %s", str( dnsapi_data ) )
+        logging.debug( "    domain data: %s", str( dnsapi_domain_data ) )
+        logging.debug( "    key data   :" )
         for key, value in key_data.iteritems():
-            logging.debug('        %s: %s', key, value)
-    if len(dnsapi_data) == 0 or 'add' in dnsapi_data:
+            logging.debug( '        %s: %s', key, value )
+    if len( dnsapi_data ) == 0 or 'add' in dnsapi_data:
         return False,
     else:
         return True, key_data['domain'], key_data['selector'], datetime.datetime.utcnow(), '-'
 
 
-def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
-    if len(dnsapi_data) == 0 or 'delete' in dnsapi_data:
+def delete( dnsapi_data, dnsapi_domain_data, record_data, debugging = False ):
+    if len( dnsapi_data ) == 0 or 'delete' in dnsapi_data:
         return False
     else:
         return True
