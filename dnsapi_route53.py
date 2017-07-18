@@ -44,8 +44,6 @@ import requests
 from requests_aws4auth import AWS4Auth
 
 
-# from xml.dom.minidom import parseString
-
 def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
     if len(dnsapi_data) < 2:
         logging.error("DNS API route53: AWS key not configured")
@@ -79,6 +77,95 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
     aws4_auth = AWS4Auth(aws_key_id, aws_key, region, 'route53')
 
     # Construct Route53 XML for the ChangeResourceRecordSets request
+    route53_xml = create_xml( 'CREATE', selector, domain_suffix, ttl, data )
+
+    endpoint = "https://route53.amazonaws.com/2013-04-01/hostedzone/{0}/rrset".format(zone_id)
+    headers = {'Content-Type': 'text/xml; charset=utf-8'}
+    resp = requests.post(endpoint, data = route53_xml, auth = aws4_auth, headers = headers)
+    logging.info("HTTP status: %d", resp.status_code)
+
+    if resp.status_code == requests.codes.ok:
+        doc = xml.dom.minidom.parseString(resp.text)
+        id = doc.getElementsByTagName('Id')
+        if id:
+            result = True, key_data['domain'], selector, datetime.datetime.utcnow(), \
+                     get_text( id.item( 0 ).childNodes ), data
+        else:
+            logging.error("DNS API route53: cannot find ID in response")
+            result = False,
+    else:
+        result = False,
+        error_text = get_error(resp)
+        logging.error("DNS API route53: HTTP error %d : %s", resp.status_code, error_text)
+        if error_text == '':
+            logging.error("DNS API route53: error response body:\n%s", resp.text)
+
+    return result
+
+
+def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
+    if len(dnsapi_data) < 2:
+        logging.error("DNS API route53: AWS key not configured")
+        return False
+    aws_key_id = dnsapi_data[0]
+    aws_key = dnsapi_data[1]
+    if len(dnsapi_domain_data) < 2:
+        logging.error("DNS API route53: domain data does not contain required data")
+        return False
+    region = dnsapi_domain_data[0]
+    zone_id = dnsapi_domain_data[1]
+    if len(dnsapi_domain_data) > 2:
+        try:
+            ttl = int(dnsapi_domain_data[2])
+            if ttl < 5:
+                ttl = 5
+        except Exception:
+            ttl = 3600
+    else:
+        ttl = 3600
+    if len(record_data) < 5:
+        logging.error("DNS API route54: saved record does not contain required data")
+        return False
+    try:
+        domain_suffix = record_data[0]
+        selector = record_data[1]
+        data = ' '.join( record_data[4:] )
+    except KeyError as e:
+        logging.error("DNS API route53: required information not present: %s", str(e))
+        return False
+    if debugging:
+        return True
+
+    aws4_auth = AWS4Auth(aws_key_id, aws_key, region, 'route53')
+
+    # Construct Route53 XML for the ChangeResourceRecordSets request
+    route53_xml = create_xml( 'DELETE', selector, domain_suffix, ttl, data )
+
+    endpoint = "https://route53.amazonaws.com/2013-04-01/hostedzone/{0}/rrset".format(zone_id)
+    headers = {'Content-Type': 'text/xml; charset=utf-8'}
+    resp = requests.post(endpoint, data = route53_xml, auth = aws4_auth, headers = headers)
+    logging.info("HTTP status: %d", resp.status_code)
+
+    if resp.status_code == requests.codes.ok:
+        doc = xml.dom.minidom.parseString(resp.text)
+        id = doc.getElementsByTagName('Id')
+        if id:
+            result = True
+        else:
+            logging.error("DNS API route53: cannot find ID in response")
+            result = False
+    else:
+        result = False
+        error_text = get_error(resp)
+        logging.error("DNS API route53: HTTP error %d : %s", resp.status_code, error_text)
+        if error_text == '':
+            logging.error("DNS API route53: error response body:\n%s", resp.text)
+
+    return result
+
+
+def create_xml( action_str, selector, domain_suffix, ttl, data ):
+    # Construct Route53 XML for the ChangeResourceRecordSets request
     impl = xml.dom.minidom.getDOMImplementation()
     doc = impl.createDocument('https://route53.amazonaws.com/doc/2013-04-01/',
                               'ChangeResourceRecordSetsRequest', None)
@@ -91,7 +178,7 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
     change = doc.createElement('Change')
     changes.appendChild(change)
     action = doc.createElement('Action')
-    action_text = doc.createTextNode('CREATE')
+    action_text = doc.createTextNode(action_str)
     action.appendChild(action_text)
     change.appendChild(action)
     rrset = doc.createElement('ResourceRecordSet')
@@ -118,59 +205,36 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
     rr.appendChild(value)
     route53_xml = doc.toxml('utf-8')
     doc.unlink()  # Let things we don't need anymore be GC'd
+    return route53_xml
 
-    endpoint = "https://route53.amazonaws.com/2013-04-01/hostedzone/{0}/rrset".format(zone_id)
-    headers = {'Content-Type': 'text/xml; charset=utf-8'}
-    resp = requests.post(endpoint, data = route53_xml, auth = aws4_auth, headers = headers)
-    logging.info("HTTP status: %d", resp.status_code)
 
-    if resp.status_code == requests.codes.ok:
+def get_error(resp):
+    try:
         doc = xml.dom.minidom.parseString(resp.text)
-        id = doc.getElementsByTagName('Id')
-        if id:
-            result = True, key_data['domain'], selector, datetime.datetime.utcnow(), \
-                     getText(id.item(0).childNodes)
+        doc.normalize()
+        error_type = doc.getElementsByTagName('Type')
+        if error_type and error_type.length > 0:
+            error_type_text = get_text( error_type.item( 0 ).childNodes )
         else:
-            logging.error("DNS API route53: cannot find ID in response")
-            result = False,
-    else:
-        result = False,
-        try:
-            doc = xml.dom.minidom.parseString(resp.text)
-            doc.normalize()
-            error_type = doc.getElementsByTagName('Type')
-            if error_type and error_type.length > 0:
-                error_type_text = getText(error_type.item(0).childNodes)
-            else:
-                error_type_text = ''
-            code = doc.getElementsByTagName('Code')
-            if code and code.length > 0:
-                code_text = getText(code.item(0).childNodes)
-            else:
-                code_text = ''
-            message = doc.getElementsByTagName('Message')
-            if message and message.length > 0:
-                message_text = getText(message.item(0).childNodes)
-            else:
-                message_text = ''
-            error_text = error_type_text + ' : ' + code_text + ' : ' + message_text
-        except Exception as e:
-            logging.error("XML exception: %s", str(e))
-            error_text = ''
+            error_type_text = ''
+        code = doc.getElementsByTagName('Code')
+        if code and code.length > 0:
+            code_text = get_text( code.item( 0 ).childNodes )
+        else:
+            code_text = ''
+        message = doc.getElementsByTagName('Message')
+        if message and message.length > 0:
+            message_text = get_text( message.item( 0 ).childNodes )
+        else:
+            message_text = ''
+        error_text = error_type_text + ' : ' + code_text + ' : ' + message_text
+        doc.unlink()
+    except Exception as e:
+        logging.error("XML exception: %s", str(e))
+        error_text = ''
+    return error_text
 
-        logging.error("DNS API route53: HTTP error %d : %s", resp.status_code, error_text)
-        if error_text == '':
-            logging.error("DNS API route53: error response body:\n%s", resp.text)
-
-    return result
-
-
-def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
-    # TODO delete record
-    return None
-
-
-def getText(nodelist):
+def get_text( nodelist ):
     rc = []
     for node in nodelist:
         if node.nodeType == node.TEXT_NODE:

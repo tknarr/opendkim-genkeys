@@ -23,7 +23,7 @@
 # dnsapi_domain_data[0] : domain_id value for domain
 # key_data['chunked']   : TXT record value in chunked (BIND) format
 
-# FreeDNS.afraid.org doesn't have a format API for updating records other than
+# FreeDNS.afraid.org doesn't have a formal API for updating records other than
 # A/AAAA records (for dynamic DNS for hosts), but we can use the form submission
 # URL to add arbitrary records. To change an existing record we'd need to include
 # a data_id parameter with the ID of the specific record being changed, and for
@@ -84,8 +84,8 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
     if resp.status_code == requests.codes.ok:
         form_start = resp.text.find('<form action=delete2.php>')
         if form_start >= 0:
-            form_end = resp.text.find('</form>', form_start)
-            form_string = w3lib.html.replace_entities(resp.text[form_start: form_end + 6])
+            form_end = resp.text.find('</form>', form_start) + 6
+            form_string = w3lib.html.replace_entities(resp.text[form_start:form_end])
         else:
             form_string = ''
         record_id = extract_record_id(form_string, selector + '._domainkey.' + key_data['domain'])
