@@ -208,31 +208,31 @@ def create_xml( action_str, selector, domain_suffix, ttl, data ):
     return route53_xml
 
 
-    def get_error( resp):
-        try:
-            doc = xml.dom.minidom.parseString(resp.text)
-            doc.normalize()
-            error_type = doc.getElementsByTagName('Type')
-            if error_type and error_type.length > 0:
-                error_type_text = get_text(error_type.item(0).childNodes)
-            else:
-                error_type_text = ''
-            code = doc.getElementsByTagName('Code')
-            if code and code.length > 0:
-                code_text = get_text(code.item(0).childNodes)
-            else:
-                code_text = ''
-            message = doc.getElementsByTagName('Message')
-            if message and message.length > 0:
-                message_text = get_text(message.item(0).childNodes)
-            else:
-                message_text = ''
-            error_text = error_type_text + ' : ' + code_text + ' : ' + message_text
-        doc.unlink()except Exception as e:
-            logging.error("XML exception: %s", str(e))
-            error_text = ''return error_text
-
-
+def get_error( resp):
+    try:
+        doc = xml.dom.minidom.parseString(resp.text)
+        doc.normalize()
+        error_type = doc.getElementsByTagName('Type')
+        if error_type and error_type.length > 0:
+            error_type_text = get_text(error_type.item(0).childNodes)
+        else:
+            error_type_text = ''
+        code = doc.getElementsByTagName('Code')
+        if code and code.length > 0:
+            code_text = get_text(code.item(0).childNodes)
+        else:
+            code_text = ''
+        message = doc.getElementsByTagName('Message')
+        if message and message.length > 0:
+            message_text = get_text(message.item(0).childNodes)
+        else:
+            message_text = ''
+        error_text = error_type_text + ' : ' + code_text + ' : ' + message_text
+        doc.unlink()
+    except Exception as e:
+        logging.error("XML exception: %s", str(e))
+        error_text = ''
+    return error_text
 
 
 def get_text(nodelist):
