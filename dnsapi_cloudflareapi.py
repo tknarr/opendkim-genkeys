@@ -38,19 +38,19 @@ import logging
 import CloudFlare
 
 
-def add(dnsapi_data, dnsapi_domain_data, key_data, debugging=False):
-    if len(dnsapi_data) < 2:
-        logging.error("DNS API Cloudflare: API credentials not configured")
+def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
+    if len( dnsapi_data ) < 2:
+        logging.error( "DNS API Cloudflare: API credentials not configured" )
         return False,
     api_key = dnsapi_data[0]
     email = dnsapi_data[1]
-    if len(dnsapi_domain_data) < 1:
-        logging.error("DNS API Cloudflare: domain data does not contain zone ID")
+    if len( dnsapi_domain_data ) < 1:
+        logging.error( "DNS API Cloudflare: domain data does not contain zone ID" )
         return False,
     zone_id = dnsapi_domain_data[0]
-    if len(dnsapi_domain_data) > 1:
+    if len( dnsapi_domain_data ) > 1:
         try:
-            ttl = int(dnsapi_domain_data[1])
+            ttl = int( dnsapi_domain_data[1] )
             if ttl < 1:
                 ttl = 1
         except Exception:
@@ -62,12 +62,12 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging=False):
         data = key_data['plain']
         domain_suffix = key_data['domain']
     except KeyError as e:
-        logging.error("DNS API Cloudflare: required information not present: %s", str(e))
+        logging.error( "DNS API Cloudflare: required information not present: %s", str( e ) )
         return False,
     if debugging:
         return True, key_data['domain'], selector
 
-    cf = CloudFlare.CloudFlare(email=email, token=api_key, debug=debugging)
+    cf = CloudFlare.CloudFlare( email = email, token = api_key, debug = debugging )
 
     request_params = {
         'type': 'TXT',
@@ -77,7 +77,7 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging=False):
     }
 
     try:
-        response = cf.zones.dns_records.post(zone_id, data=request_params)
+        response = cf.zones.dns_records.post( zone_id, data = request_params )
         if response:
             # TODO need resource ID appended to result
             result = True, key_data['domain'], selector, datetime.datetime.utcnow()
@@ -85,15 +85,15 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging=False):
             result = False,
     except CloudFlare.exceptions.CloudFlareAPIError as e:
         result = False,
-        if len(e) > 0:
+        if len( e ) > 0:
             for ex in e:
-                logging.error('DNS API Cloudflare: [%d] %s', ex, ex)
+                logging.error( 'DNS API Cloudflare: [%d] %s', ex, ex )
         else:
-            logging.error('DNS API Cloudflare: [%d] %s', e, e)
+            logging.error( 'DNS API Cloudflare: [%d] %s', e, e )
 
     return result
 
 
-def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
+def delete( dnsapi_data, dnsapi_domain_data, record_data, debugging = False ):
     # TODO delete record
     return None

@@ -44,20 +44,20 @@ import requests
 from requests_aws4auth import AWS4Auth
 
 
-def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
-    if len(dnsapi_data) < 2:
-        logging.error("DNS API route53: AWS key not configured")
+def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
+    if len( dnsapi_data ) < 2:
+        logging.error( "DNS API route53: AWS key not configured" )
         return False,
     aws_key_id = dnsapi_data[0]
     aws_key = dnsapi_data[1]
-    if len(dnsapi_domain_data) < 2:
-        logging.error("DNS API route53: domain data does not contain required data")
+    if len( dnsapi_domain_data ) < 2:
+        logging.error( "DNS API route53: domain data does not contain required data" )
         return False,
     region = dnsapi_domain_data[0]
     zone_id = dnsapi_domain_data[1]
-    if len(dnsapi_domain_data) > 2:
+    if len( dnsapi_domain_data ) > 2:
         try:
-            ttl = int(dnsapi_domain_data[2])
+            ttl = int( dnsapi_domain_data[2] )
             if ttl < 5:
                 ttl = 5
         except Exception:
@@ -69,12 +69,12 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
         data = key_data['chunked']
         domain_suffix = key_data['domain']
     except KeyError as e:
-        logging.error("DNS API route53: required information not present: %s", str(e))
+        logging.error( "DNS API route53: required information not present: %s", str( e ) )
         return False,
     if debugging:
         return True,
 
-    aws4_auth = AWS4Auth(aws_key_id, aws_key, region, 'route53')
+    aws4_auth = AWS4Auth( aws_key_id, aws_key, region, 'route53' )
 
     # Construct Route53 XML for the ChangeResourceRecordSets request
     route53_xml = create_xml( 'CREATE', selector, domain_suffix, ttl, data )
@@ -167,8 +167,8 @@ def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
 def create_xml( action_str, selector, domain_suffix, ttl, data ):
     # Construct Route53 XML for the ChangeResourceRecordSets request
     impl = xml.dom.minidom.getDOMImplementation()
-    doc = impl.createDocument('https://route53.amazonaws.com/doc/2013-04-01/',
-                              'ChangeResourceRecordSetsRequest', None)
+    doc = impl.createDocument( 'https://route53.amazonaws.com/doc/2013-04-01/',
+                               'ChangeResourceRecordSetsRequest', None )
     root = doc.documentElement
     root.setAttribute('xmlns', 'https://route53.amazonaws.com/doc/2013-04-01/')
     chg_batch = doc.createElement('ChangeBatch')
@@ -208,35 +208,36 @@ def create_xml( action_str, selector, domain_suffix, ttl, data ):
     return route53_xml
 
 
-def get_error(resp):
-    try:
-        doc = xml.dom.minidom.parseString(resp.text)
-        doc.normalize()
-        error_type = doc.getElementsByTagName('Type')
-        if error_type and error_type.length > 0:
-            error_type_text = get_text( error_type.item( 0 ).childNodes )
-        else:
-            error_type_text = ''
-        code = doc.getElementsByTagName('Code')
-        if code and code.length > 0:
-            code_text = get_text( code.item( 0 ).childNodes )
-        else:
-            code_text = ''
-        message = doc.getElementsByTagName('Message')
-        if message and message.length > 0:
-            message_text = get_text( message.item( 0 ).childNodes )
-        else:
-            message_text = ''
-        error_text = error_type_text + ' : ' + code_text + ' : ' + message_text
-        doc.unlink()
-    except Exception as e:
-        logging.error("XML exception: %s", str(e))
-        error_text = ''
-    return error_text
+    def get_error( resp):
+        try:
+            doc = xml.dom.minidom.parseString(resp.text)
+            doc.normalize()
+            error_type = doc.getElementsByTagName('Type')
+            if error_type and error_type.length > 0:
+                error_type_text = get_text(error_type.item(0).childNodes)
+            else:
+                error_type_text = ''
+            code = doc.getElementsByTagName('Code')
+            if code and code.length > 0:
+                code_text = get_text(code.item(0).childNodes)
+            else:
+                code_text = ''
+            message = doc.getElementsByTagName('Message')
+            if message and message.length > 0:
+                message_text = get_text(message.item(0).childNodes)
+            else:
+                message_text = ''
+            error_text = error_type_text + ' : ' + code_text + ' : ' + message_text
+        doc.unlink()except Exception as e:
+            logging.error("XML exception: %s", str(e))
+            error_text = ''return error_text
 
-def get_text( nodelist ):
+
+
+
+def get_text(nodelist):
     rc = []
     for node in nodelist:
         if node.nodeType == node.TEXT_NODE:
-            rc.append(node.data)
-    return ''.join(rc)
+            rc.append( node.data )
+    return ''.join( rc )
