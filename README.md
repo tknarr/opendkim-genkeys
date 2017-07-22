@@ -196,10 +196,14 @@ and selector information the sender's DKIM software put into the signature heade
 The recommended setup is to have two directories, a binaries directory where the
 `genkeys.py` script and the various `dnsapi_*.py` scripts are installed and a data
 directory where your configuration files and data files are located. The binaries
-directory doesn't need to be in your path, if it isn't you may want an alias or
-small wrapper script so you don't have to use the full path to `genkeys.py` every
-time. You can put the binaries directly in the data directory, but it increases the
-clutter and the chances that you'll accidentally delete the script files.
+directory doesn't need to be in your path. You can put the binaries directly in the
+data directory, but it increases the clutter and the chances that you'll accidentally
+delete the script files. A better organization is to have the binaries and data
+directories as siblings beneath a parent directory dedicated to this software. Copy
+the contents of the `src` and `util` directories of the downloaded package into the
+binaries directory, and the contents of the `data` directory into the data directory.
+Then `cd` to the data directory and run the `initialize_data_dir.sh` script to set up
+the initial data files correctly.
 
 Edit `dnsapi.ini` and `domains.ini` and enter the information for your accounts
 and domains at your DNS service providers. If you have domains at DNS service providers
@@ -209,13 +213,13 @@ You can delete the `dnsapi.ini` entries for services that you don't use if you w
 but make sure to retain the `null` API entry because it's used implicitly for domains
 hosted on services that don't use a supported API.
 
-Once the two configuration files are set up, you just run `genkeys.py` with the `-n`
-option at the end of the month. That will generate new private and public key files
-for every domain listed using the selector value for next month and automatically
-add the appropriate public-key TXT records to all domains that you've set up API
-information for. For domains that either don't have a DNS API available or you don't
-have (or haven't configured) information for, you'll have to update the DNS data
-by hand to create the TXT records. The data for the records is in the `*.YYYYMM.txt`
+Once the two configuration files are set up, you just `cd` to the data directory and
+run `genkeys.py` with the `-n` option at the end of the month. That will generate new
+private and public key files for every domain listed using the selector value for next
+month and automatically add the appropriate public-key TXT records to all domains that
+you've set up API information for. For domains that either don't have a DNS API available
+or you don't have (or haven't configured) information for, you'll have to update the DNS
+data by hand to create the TXT records. The data for the records is in the `*.YYYYMM.txt`
 files created by the script. Use the `opendkim-testkey` command to verify the records
 are OK.
 
@@ -242,7 +246,9 @@ a rigorous monthly key rotation schedule.
 
 If you want to set your own selector values, say if management dictates or you need to rotate
 keys more often than every month, you can pass a selector value as a command-line parameter.
-`genkeys.py` will use that value as the selector instead of generating one.
+`genkeys.py` will use that value as the selector instead of generating one. The `dkim_rotation.sh`
+script uses this to allow getting and displaying the selector value and then guaranteeing
+that the displayed value will be the one actually used.
 
 ## Automation scripts
 
