@@ -22,4 +22,8 @@ cat /dev/null >dns_update_data.ini
 cat /dev/null >key.table
 cat /dev/null >signing.table
 
+echo ""
+echo "Be sure to edit dnsapi.ini and domains.ini to match your DNS providers."
+echo ""
+
 exit 0
