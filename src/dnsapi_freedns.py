@@ -118,8 +118,8 @@ def delete( dnsapi_data, dnsapi_domain_data, record_data, debugging = False ):
     if debugging:
         return True
 
-    resp = requests.get( 'http://freedns.afraid.org/subdomain/delete2.php?data_id[]=' + record_id
-                         + '8&submit=delete selected',
+    resp = requests.get( 'https://freedns.afraid.org/subdomain/delete2.php',
+                         { 'data_id[]': record_id, 'submit': 'delete selected' },
                          cookies = { 'dns_cookie': cookie_value } )
     logging.info( "HTTP status: %d", resp.status_code )
 
