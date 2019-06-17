@@ -55,7 +55,9 @@ class Genkeys():
             "signing_table" : "signing.table",
             "key_directory" : "/etc/opendkim/keys",
             "cleanup_files" : True,
-            "day_difference" : 70
+            "day_difference" : 70,
+            "store_in_new_files" : True,
+            "no_write_file" : False
         }
 
         try:
@@ -332,7 +334,10 @@ class Genkeys():
         else:
             # create dns update data
             try:
-                open(self.config["dns_update_data_file_name"], "w")
+                if self.config["store_in_new_files"]:
+                    open(self.config["dns_update_data_file_name"] + ".new", "w")
+                else:
+                    open(self.config["dns_update_data_file_name"], "w")
             except:
                 logging.error("Failed to create %s", self.config["dns_update_data_file_name"])
 
@@ -448,10 +453,16 @@ class Genkeys():
                 else:
                     line += str(field)
             return line
+        key_table_file_name = "key.table"
+        signing_table_file = "signing.table"
+
+        if self.config["store_in_new_files"]:
+            key_table_file_name += ".new"
+            signing_table_file += ".new"
 
         try:
-            key_table_file = open("key.table", "w")
-            signing_table_file = open("signing.table", "w")
+            key_table_file = open(key_table_file_name, "w")
+            signing_table_file = open(signing_table_file, "w")
         except IOError as exception:
             logging.critical("Error creating new key or signing table file")
             logging.error("%s", str(exception))
@@ -468,7 +479,7 @@ class Genkeys():
                     logging.error("%s", str(exception))
                     return False
         # Now write the updated lines to the files
-        for domain, domain_data in self.domain_data.values():
+        for domain in self.domain_data.keys():
             if domain not in failed_domains:
                 code = domain.replace(".", "-")
                 logging.info("Adding entries for %s", domain)
@@ -508,15 +519,21 @@ class Genkeys():
                             help="The path to the configuration file",
                             default="/etc/opendkim-genkeys.yml")
         parser.add_argument("--no-dns", dest="update_dns", action="store_false",
+                            default=argparse.SUPPRESS,
                             help="Do not update DNS data")
         parser.add_argument("--no-cleanup", dest="cleanup_files", action="store_false",
+                            default=argparse.SUPPRESS,
                             help="Do not delete old key files")
         parser.add_argument("--debug", dest="log_debug", action="store_true",
                             help="Log debugging info and do not update DNS")
         parser.add_argument("--use-null", dest="use_null_dnsApi", action="store_true",
                             help="Silently use the null DNS API instead of the real API")
         parser.add_argument("--no-write-file", dest="no_write_file", action="store_true",
+                            default=argparse.SUPPRESS,
                             help="Disable writing any file changes to the key or signing table, or any of the yml files.")
+        parser.add_argument("--store-in-new-files", dest="store_in_new_files", action="store_true",
+                            default=argparse.SUPPRESS,
+                            help="Do not overwrite old key and signing table files or dnsupdate.yml files, but write new ones")
         parser.add_argument("--version", dest="display_version", action="store_true",
                             help="Display the program version")
         parser.add_argument("selector", nargs="?", default=None, help="Selector to use")
@@ -524,17 +541,24 @@ class Genkeys():
 
         self.args = parser.parse_args()
         if self.args.display_version:
-            print("OpenDKIM genkeys.py v{0}".format(self.VERSION))
+            print("OpenDKIM genkeys %s" % self.VERSION)
             sys.exit(0)
 
     def overwrite_from_args(self):
-        if not self.args.update_dns:
-            logging.debug("Disabling updating to dns due to a passed argument")
-            self.config["should_update_dns"] = False
+        if hasattr(self.args, "update_dns"):
+            logging.debug("Overwriting updating to dns from args: %s", self.args.update_dns)
+            self.config["should_update_dns"] = self.args.update_dns
 
-        if self.args.cleanup_files:
-            logging.debug("Enabling cleaning up old key files due to a passed argument")
-            self.config["cleanup_files"] = True
+        if hasattr(self.args, "cleanup_files"):
+            logging.debug("Overwriting cleaning up old key files from args: %s", self.args.cleanup_files)
+            self.config["cleanup_files"] = self.args.cleanup_files
+
+        if hasattr(self.args, "no_write_file"):
+            logging.debug("Overwriting cleaning up old key files from args: %s", self.args.no_write_file)
+            self.config["no_write_file"] = self.args.no_write_file
+        if hasattr(self.args, "store_in_new_files"):
+            logging.debug("Overwriting store_in_new_files from args: %s", self.args.store_in_new_files)
+            self.config["store_in_new_files"] = self.args.store_in_new_files
         print(2)
 
     def decide_arguments(self):
@@ -556,7 +580,7 @@ class Genkeys():
             logging.debug("Disabling updating DNS because outputting a selector is enabled")
         print(1)
         working_dir = self.args.working_dir
-        if working_dir != "":
+        if "--working-dir" in sys.argv:
             logging.debug("Setting working directory from argument")
             logging.info("Changing working directory to %s", working_dir)
             os.chdir(working_dir)
@@ -612,7 +636,7 @@ class Genkeys():
 
         failed_domains = self.update_dns(key_names, generated_key_data,
                                                dns_apis, should_update_dns)
-        if not self.args.no_write_file:
+        if not self.config["no_write_file"]:
             logging.info("Generating key and signing tables")
             self.write_tables(key_table_contents, selector, failed_domains)
         else:
