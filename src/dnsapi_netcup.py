@@ -31,24 +31,23 @@ import logging
 from nc_dnsapi import Client, DNSRecord
 
 
-def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
+def add(dnsapi_data, dnsapi_domain_data, key_data, debugging=False):
     if len(dnsapi_data) != 3:
         logging.error("Invalid or incomplete dnsapi configuration!")
         return False,
-
-    customerId = dnsapi_data[0]
-    apiKey = dnsapi_data[1]
-    apiPw = dnsapi_data[2]
+    # try logging in
+    customer_id = dnsapi_data[0]
+    api_key = dnsapi_data[1]
+    api_pw = dnsapi_data[2]
     domain = key_data['domain']
     selector = key_data['selector']
-    # try logging in
-    api = Client(customerId, apiKey, apiPw)
+    api = Client(customer_id, api_key, api_pw)
     print(key_data)
     if api:
         try:
             api.add_dns_record(domain, DNSRecord(selector + "._domainkey", "TXT", key_data['plain']))
         except Exception as e:
-            logging.error("Failed to add the record: {}".format(e))
+            logging.error("Failed to add the record: %s", e)
             return False,
         api.logout()
     else:
@@ -56,21 +55,21 @@ def add(dnsapi_data, dnsapi_domain_data, key_data, debugging = False):
         return False,
     return True, domain, selector
 
-def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
+def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging=False):
     if len(dnsapi_data) != 3:
         logging.error("Invalid or incomplete dnsapi configuration!")
         return False
 
-    customerId = dnsapi_data[0]
-    apiKey = dnsapi_data[1]
-    apiPw = dnsapi_data[2]
+    customer_id = dnsapi_data[0]
+    api_key = dnsapi_data[1]
+    api_pw = dnsapi_data[2]
     domain = record_data[0]
     selector = record_data[1]
     # try logging in
-    api = Client(customerId, apiKey, apiPw)
+    api = Client(customer_id, api_key, api_pw)
     if api:
         try:
-            api.delete_dns_record(domain, DNSRecord(selector + "._domainkey", "TXT", key_data['plain']))
+            api.delete_dns_record(domain, DNSRecord(selector + "._domainkey", "TXT", None))
         except Exception as e:
             logging.error("Failed to delete the record: {}".format(e))
             return False
@@ -79,4 +78,3 @@ def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
         logging.error("Failed to login!")
         return False
     return True
-
