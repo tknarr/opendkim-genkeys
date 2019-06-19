@@ -39,6 +39,7 @@ class Genkeys():
         self.config = None
         self.dns_api_data = None
         self.domain_data = None
+        self.logger = logging.getLogger(__name__)
 
     def read_config(self, config_path):
         """Reads the configuration from the given configuration path and sets the default
@@ -50,13 +51,13 @@ class Genkeys():
             "never_update_dns" : False,
             "domain_file_name" : "domains.yml",
             "dns_api_defs_filename" : "dnsapi.yml",
-            "dns_update_data_file_name" : "dnsupdate_data.yml",
+            "dns_update_data_file_name" : "dns_update_data.yml",
             "key_table" : "key.table",
             "signing_table" : "signing.table",
             "key_directory" : "/etc/opendkim/keys",
             "cleanup_files" : True,
             "day_difference" : 70,
-            "store_in_new_files" : True,
+            "store_in_new_files" : False,
             "no_write_file" : False
         }
 
@@ -71,12 +72,12 @@ class Genkeys():
 
         try:
             # dns_api_data files are now yml files, not ini files
-            dns_api_data = yaml.safe_load(open(self.config["dns_api_defs_filename"], "r"))
-            if not isinstance(dns_api_data, dict):
-                raise TypeError("Incorrect file format in file %s, it needs to contain a dict." %
+            self.dns_api_data = yaml.safe_load(open(self.config["dns_api_defs_filename"], "r"))
+            if not isinstance(self.dns_api_data, dict):
+                self.logger.error("Incorrect file format in file %s, it needs to contain a dict. Aborting." %
                                 self.config["dns_api_defs_filename"])
-            else:
-                self.dns_api_data = {}
+                sys.exit(1)
+
         except Exception as exception:
             self.dns_api_data = {}
             if not self.config["never_update_dns"]:
@@ -84,6 +85,7 @@ class Genkeys():
                 logging.critical("Exception: %s", exception)
                 return False
         self.dns_api_data.setdefault("null", [])
+
         return True
 
     # @returns Bool True if reading succeeded, False if it did not succeed.
@@ -96,25 +98,23 @@ class Genkeys():
         #       "parameters" : ["foo", "bar"]
         #       }
         #   }
-        print(4)
+
         try:
             self.domain_data = yaml.safe_load(open(self.config["domain_file_name"], "r"))
         except Exception as exception:
-            print(5)
             logging.critical("Failed to load domain configuration, aborting!")
             logging.critical("Exception: %s", exception)
             return False
 
+        logging.info("%s", self.domain_data)
         if self.domain_data is None:
             logging.critical("No domain definitions found.")
-            print(6)
             return False
         # find any domains without configured api and set it to "null"
-        print(self.domain_data, 7)
         for domain_data in self.domain_data.values():
             domain_data.setdefault("api", "null")
             domain_data.setdefault("parameters", [])
-        print(self.domain_data, 8)
+
         return True
 
     def read_key_table(self):
@@ -167,14 +167,13 @@ class Genkeys():
             logging.warning("Failed to read DNS update data file. Resuming without it.")
             logging.warning("Exception: %s", exception)
             return []
-        logging.debug("dns update data contents %s", file_contents)
+        self.logger.debug("dns update data contents %s", file_contents)
         return file_contents
 
     def get_key_names(self):
         """ Get all key names from the key file """
         key_names = []
         for domain_data in self.domain_data.values():
-            print("foo", domain_data)
             key_name = domain_data.get("key")
             if key_name is not None and key_name not in key_names:
                 key_names.append(key_name)
@@ -184,13 +183,13 @@ class Genkeys():
         """ Generate all keys """
         generated_key_data = {}
         for key in key_names:
-            logging.info("Generating key %s", key)
+            self.logger.info("Generating key %s", key)
             key_data = self.generate_singular_key(key, selector)
             if key_data is None:
                 logging.critical("Error generating key %s", key)
                 return False
             generated_key_data[key] = key_data
-        logging.debug("generated key data contents %s", generated_key_data)
+        self.logger.debug("generated key data contents %s", generated_key_data)
         return generated_key_data
 
     def generate_singular_key(self, key, selector, key_kength=2048):
@@ -199,19 +198,19 @@ class Genkeys():
         private_key_file_name = "{}/{}.{}.key".format(self.config["key_directory"], key,
                                                       selector)
         if not os.path.exists(private_key_file_name):
-            logging.info("File %s for selector %s does not exist yet, generating it.",
-                         private_key_file_name, selector)
+            self.logger.info("File %s for selector %s (key %s) does not exist yet, generating it.",
+                         private_key_file_name, key, selector)
             # file does not exist
             process = subprocess.run(["openssl", "genrsa", "-out", private_key_file_name, "--",
                                       str(key_kength)], stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE)
             if process.returncode:
-                logging.error(
+                self.logger.error(
                     "openssl genrsa failed with returncode %s and the following error output: %s",
                     process.returncode, process.stderr)
                 return None
         else:
-            logging.warning("Files for %s selector %s already exist", key, selector)
+            logging.warning("Files for key %s selector %s already exist", key, selector)
 
         # convert to public key then generate TXT record, write and use it
         process = subprocess.run(["openssl", "rsa", "-in", private_key_file_name, "-pubout",
@@ -219,7 +218,7 @@ class Genkeys():
                                  stderr=subprocess.PIPE)
 
         if process.returncode:
-            logging.error("openssl rsa failed with returncode %s and the following error"
+            self.logger.error("openssl rsa failed with returncode %s and the following error"
                           "output: %s", process.returncode, process.stderr)
             return None
 
@@ -275,10 +274,10 @@ class Genkeys():
                 module = importlib.import_module(module_name)
             except ImportError as exception:
                 module = None
-                logging.error("Module %s for DNS API %s not found", module_name, api_name)
-                logging.info("%s", str(exception))
+                self.logger.error("Module %s for DNS API %s not found", module_name, api_name)
+                self.logger.info("%s", str(exception))
             if module is not None:
-                logging.debug("DNS API module %s loaded", api_name)
+                self.logger.debug("DNS API module %s loaded", api_name)
                 dns_apis[api_name] = module
         if len(dns_apis) == 0:
             logging.warning("No DNS API modules found at %s", os.path.dirname(__file__))
@@ -295,20 +294,20 @@ class Genkeys():
         for record in update_data:
             if record["domain"] == dns_domain_data["api"] and record["date"] < cutoff:
                 if removed_count == 0:
-                    logging.info("Removing old records for %s", dns_domain_data["api"])
+                    self.logger.info("Removing old records for %s", dns_domain_data["api"])
                 removed_count += 1
                 result = dns_api_module.delete(self.dns_api_data[dns_domain_data["api"]]["parameters"],
                                                dns_domain_data, record, self.args.log_debug)
                 if result is None:
-                    logging.info("No support for removing old record for %s:%s via %s API",
+                    self.logger.info("No support for removing old record for %s:%s via %s API",
                                  dns_domain_data["api"], record["key"], key_data["dns_api"])
                     # Preserve record if we encountered an error
                     new_update_data.append(record)
                 elif result:
-                    logging.info("Removing %s:%s created at %s", record["domain"], record["key"],
+                    self.logger.info("Removing %s:%s created at %s", record["domain"], record["key"],
                                  record["date"].strftime("%Y-%m-%d %H:%M:%S"))
                 else:
-                    logging.error("Error removing old record for %s:%s via %s API",
+                    self.logger.error("Error removing old record for %s:%s via %s API",
                                   record["domain"], record["key"], key_data["dns_api"])
                     # Preserve record if we encountered an error
                     new_update_data.append(record)
@@ -317,11 +316,11 @@ class Genkeys():
     def write_file(self, file, data):
         try:
             with open(file, "w") as handle:
-                yaml.safe_dump(handle, data)
+                yaml.safe_dump(data, handle)
         except IOError as exception:
-            logging.error("Failed to write to %s due to IO exception %s", file, exception)
+            self.logger.error("Failed to write to %s due to IO exception %s", file, exception)
         except Exception as exception:
-            logging.error("Failed to write to %s due to general exception %s", file, exception)
+            self.logger.error("Failed to write to %s due to general exception %s", file, exception)
 
     def update_dns(self, key_names, generated_key_data, dns_apis, should_update_dns):
         update_data = self.read_dns_update_data(self.config["dns_update_data_file_name"])
@@ -339,9 +338,10 @@ class Genkeys():
                 else:
                     open(self.config["dns_update_data_file_name"], "w")
             except:
-                logging.error("Failed to create %s", self.config["dns_update_data_file_name"])
+                self.logger.error("Failed to create %s", self.config["dns_update_data_file_name"])
+            update_data = []
 
-        logging.info("Updating DNS records")
+        self.logger.info("Updating DNS records")
         # Discard records older than 10 weeks (roughly the midpoint of the month 2 months ago),
         # which should retain the last 2 records and discard the 3rd and older record if a monthly
         # rotation is in use.
@@ -364,7 +364,7 @@ class Genkeys():
 
                 # if the API is available, apply the update
                 if dns_api_module:
-                    logging.debug("Found DNS module %s for %s", dns_api_module, domain)
+                    self.logger.debug("Found DNS module %s for %s", dns_api_module, domain)
                     dns_api_data = self.dns_api_data[dns_api_name]
                     key_data = generated_key_data[thisdomain_data].copy()
 
@@ -377,68 +377,66 @@ class Genkeys():
                                                              key_data, dns_api_module, 70)
 
                         # Add new record
-                        logging.info("Updating selector %s for %s with key %s",
-                                     key_data["selector"], domain, thisdomain_data["key"])
+                        self.logger.info("Updating selector %s for %s with key %s",
+                                         key_data["selector"], domain, thisdomain_data["key"])
                         if should_update_dns:
                             result = dns_api_module.add(dns_api_data, dns_api_parameters, key_data,
                                                         self.args.log_debug)
                         if result[0]:
-                            logging.info("Update succeeded.")
+                            self.logger.info("Update succeeded.")
                             records = list(result[1:])
                             if isinstance(update_data, list):
                                 update_data.append(records)
                         else:
-                            logging.error("Error adding new record for %s with key %s via %s API",
-                                          domain, thisdomain_data["key"], dns_api_name)
+                            self.logger.error("Error adding new record for %s with key %s via %s API",
+                                              domain, thisdomain_data["key"], dns_api_name)
 
                             failed_domains.append(domain)
                 else:
-                    logging.error("Configured DNS API %s of %s not found!", dns_api_name,
-                                  thisdomain_data["api"])
+                    self.logger.error("Configured DNS API %s of %s not found!", dns_api_name,
+                                      thisdomain_data["api"])
                     failed_domains.append(domain)
 
         if self.config["cleanup_files"]:
             self.write_file(self.config["dns_update_data_file_name"], update_data)
+            target_list = []
+            # Find all files that match the name pattern for one of our
+            # domain name abbreviations
+            for target in key_names:
+                target_list += glob.glob(target + ".*.key") + glob.glob(target + ".*.txt")
+            # Go through the update data and remove the entries from target_list that are
+            # still referred to by an update_data item.
+            for domain_update_data in update_data:
+                # if there are insufficient parameters in the object, it is skipped.
+                # It needs to have at least a domain name and a selector
+                if len(domain_update_data) < 2:
+                    self.logger.debug("Skipping domain because of too few parameters")
+                    continue
 
-            if self.config["cleanup_files"]:
-                target_list = []
-                # Find all files that match the name pattern for one of our
-                # domain name abbreviations
-                for target in key_names:
-                    target_list += glob.glob(target + ".*.key") + glob.glob(target + ".*.txt")
-                # Go through the update data and remove the entries from target_list that are
-                # still referred to by an update_data item.
-                for domain_update_data in update_data:
-                    # if there are insufficient parameters in the object, it is skipped.
-                    # It needs to have at least a domain name and a selector
-                    if len(domain_update_data) < 2:
-                        logging.debug("Skipping domain because of too few parameters")
-                        continue
-
-                    domain_key = self.domain_data.get(domain_update_data["domain"])
-                    if domain_key is not None:
-                        for suffix in [".key", ".txt"]:
-                            item_str = domain_key + "." + domain_update_data[1] + suffix
-                            try:
-                                i = target_list.index(item_str)
-                            except:
-                                i = -1
-                            if i >= 0:
-                                del target_list[i]
-                # Don't clean entries for domains that failed the DNS update
-                for failed_domain in failed_domains:
-                    domain_key = self.domain_data.get(failed_domain)
-                    if domain_key is not None:
-                        new_list = [x for x in target_list if not x.startswith(domain_key + ".")]
-                        target_list = new_list
-                # What's left in target_list are just the files that aren't referred to anymore and
-                # are eligible for being deleted.
-                for filename in target_list:
-                    logging.info("Removing obsolete file %s", filename)
-                    try:
-                        os.remove(filename)
-                    except:
-                        logging.warning("Failed removing obsolete file %s", filename)
+                domain_key = self.domain_data.get(domain_update_data["domain"])
+                if domain_key is not None:
+                    for suffix in [".key", ".txt"]:
+                        item_str = domain_key + "." + domain_update_data[1] + suffix
+                        try:
+                            i = target_list.index(item_str)
+                        except:
+                            i = -1
+                        if i >= 0:
+                            del target_list[i]
+            # Don't clean entries for domains that failed the DNS update
+            for failed_domain in failed_domains:
+                domain_key = self.domain_data.get(failed_domain)
+                if domain_key is not None:
+                    new_list = [x for x in target_list if not x.startswith(domain_key + ".")]
+                    target_list = new_list
+            # What's left in target_list are just the files that aren't referred to anymore and
+            # are eligible for being deleted.
+            for filename in target_list:
+                self.logger.info("Removing obsolete file %s", filename)
+                try:
+                    os.remove(filename)
+                except:
+                    logging.warning("Failed removing obsolete file %s", filename)
 
         return failed_domains
 
@@ -465,32 +463,32 @@ class Genkeys():
             signing_table_file = open(signing_table_file, "w")
         except IOError as exception:
             logging.critical("Error creating new key or signing table file")
-            logging.error("%s", str(exception))
+            self.logger.error("%s", str(exception))
             sys.exit(1)
         # Write the unupdated entries back to the files
         for key_domain, key_domain_data in key_domain_table.items():
             if key_domain in failed_domains:
-                logging.info("Preserving entries for %s", key_domain)
+                self.logger.info("Preserving entries for %s", key_domain)
                 try:
                     key_table_file.write("%s\t%s\n" % (key_domain, fields_to_line(key_domain_data)))
                     signing_table_file.write("*@%s\t%s\n" % (key_domain, key_domain_data["api"]))
                 except IOError as exception:
                     logging.critical("Error writing new key or signing table file")
-                    logging.error("%s", str(exception))
+                    self.logger.error("%s", str(exception))
                     return False
         # Now write the updated lines to the files
-        for domain in self.domain_data.keys():
+        for domain, domain_data in self.domain_data.items():
             if domain not in failed_domains:
                 code = domain.replace(".", "-")
-                logging.info("Adding entries for %s", domain)
+                self.logger.info("Adding entries for %s", domain)
                 try:
                     key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
-                                          (code, domain, selector, self.config["opendkim_dir"],
-                                           domain, selector))
+                                          (code, domain, selector, self.config["opendkim_dir"] + "/keys",
+                                           domain_data["key"], selector))
                     signing_table_file.write("*@%s\t%s\n" % (domain, code))
                 except IOError as exception:
                     logging.critical("Error writing new key or signing table file")
-                    logging.error("%s", str(exception))
+                    self.logger.error("%s", str(exception))
                     return False
         key_table_file.close()
         signing_table_file.close()
@@ -533,7 +531,7 @@ class Genkeys():
                             help="Disable writing any file changes to the key or signing table, or any of the yml files.")
         parser.add_argument("--store-in-new-files", dest="store_in_new_files", action="store_true",
                             default=argparse.SUPPRESS,
-                            help="Do not overwrite old key and signing table files or dnsupdate.yml files, but write new ones")
+                            help="Do not overwrite old key and signing table files or dns_update_data.yml files, but write new ones")
         parser.add_argument("--version", dest="display_version", action="store_true",
                             help="Display the program version")
         parser.add_argument("selector", nargs="?", default=None, help="Selector to use")
@@ -546,43 +544,42 @@ class Genkeys():
 
     def overwrite_from_args(self):
         if hasattr(self.args, "update_dns"):
-            logging.debug("Overwriting updating to dns from args: %s", self.args.update_dns)
+            self.logger.debug("Overwriting updating to dns from args: %s", self.args.update_dns)
             self.config["should_update_dns"] = self.args.update_dns
 
         if hasattr(self.args, "cleanup_files"):
-            logging.debug("Overwriting cleaning up old key files from args: %s", self.args.cleanup_files)
+            self.logger.debug("Overwriting cleaning up old key files from args: %s", self.args.cleanup_files)
             self.config["cleanup_files"] = self.args.cleanup_files
 
         if hasattr(self.args, "no_write_file"):
-            logging.debug("Overwriting cleaning up old key files from args: %s", self.args.no_write_file)
+            self.logger.debug("Overwriting cleaning up old key files from args: %s", self.args.no_write_file)
             self.config["no_write_file"] = self.args.no_write_file
+
         if hasattr(self.args, "store_in_new_files"):
-            logging.debug("Overwriting store_in_new_files from args: %s", self.args.store_in_new_files)
+            self.logger.debug("Overwriting store_in_new_files from args: %s", self.args.store_in_new_files)
             self.config["store_in_new_files"] = self.args.store_in_new_files
-        print(2)
 
     def decide_arguments(self):
         should_update_dns = self.config["never_update_dns"]
 
+        level = logging.WARN
         if self.args.log_debug:
             level = logging.DEBUG
         elif self.args.log_info:
             level = logging.INFO
-        else:
-            level = logging.WARN
 
         if self.args.output_selector:
             should_update_dns = False
             level = logging.ERROR
-
+        self.logger.setLevel(level)
         logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
         if self.args.output_selector:
-            logging.debug("Disabling updating DNS because outputting a selector is enabled")
-        print(1)
+            self.logger.debug("Disabling updating DNS because outputting a selector is enabled")
+
         working_dir = self.args.working_dir
         if "--working-dir" in sys.argv:
-            logging.debug("Setting working directory from argument")
-            logging.info("Changing working directory to %s", working_dir)
+            self.logger.debug("Setting working directory from argument")
+            self.logger.info("Changing working directory to %s", working_dir)
             os.chdir(working_dir)
 
 
@@ -590,20 +587,20 @@ class Genkeys():
         if selector is None:
             selector = self.generate_selector()
         else:
-            logging.info("Selector: %s", selector)
+            self.logger.info("Selector: %s", selector)
             if self.args.output_selector:
-                print(selector)
+
                 sys.exit(0)
 
         return should_update_dns, selector
 
     def read_files(self):
-        logging.debug("Reading files")
+        self.logger.debug("Reading files")
         self.read_dns_api()
-        print(3)
+
         if not self.read_domain_data():
             sys.exit(1)
-        print(8)
+
 
     def main(self):
 
@@ -611,23 +608,22 @@ class Genkeys():
 
         self.read_config(self.args.config)
 
-        self.overwrite_from_args()
-
         should_update_dns, selector = self.decide_arguments()
 
-        self.read_files()
+        self.overwrite_from_args()
 
+        self.read_files()
         key_names = self.get_key_names()
-        print(key_names, 9)
+
         generated_key_data = self.generate_keys(key_names, selector)
-        print(generated_key_data)
+
 
         # That also gives us the private key and public key txt files needed
+
 
         key_table_contents = self.read_key_table()
         if key_table_contents is False:
             key_table_contents = {}
-
         # Check for our DNS API modules. If we don"t have any, there"s no sense in
         # trying to do automatic updating even if we"re supposed to.
         dns_apis, should_update_dns_new = self.find_dns_api_modules()
@@ -637,10 +633,10 @@ class Genkeys():
         failed_domains = self.update_dns(key_names, generated_key_data,
                                                dns_apis, should_update_dns)
         if not self.config["no_write_file"]:
-            logging.info("Generating key and signing tables")
+            self.logger.info("Generating key and signing tables")
             self.write_tables(key_table_contents, selector, failed_domains)
         else:
-            logging.info("Not writing key or signing tables")
+            self.logger.info("Not writing key or signing tables")
 
         sys.exit(0)
 
