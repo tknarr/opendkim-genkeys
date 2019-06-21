@@ -654,7 +654,7 @@ class Genkeys():
                             default=argparse.SUPPRESS,
                             help="Do not delete old key files")
         parser.add_argument("--debug", dest="log_debug", action="store_true",
-                            help="Log debugging info and do not update DNS")
+                            help="Log debugging info")
         parser.add_argument("--use-null", dest="use_null_dnsApi", action="store_true",
                             help="Silently use the null DNS API instead of the real API")
         parser.add_argument("--no-write-file", dest="no_write_file", action="store_true",
