@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 #    OpenDKIM genkeys tool
-#    Copyright (C) 2016 Todd Knarr <tknarr@silverglass.org>
+#    Copyright (C) 2018 Noel Kuntze <noel.kuntze+github@thermi.consulting>
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -25,507 +25,752 @@ import logging
 import os
 import os.path
 import string
+import subprocess
 import sys
+import yaml
 
-# Settings, edit as appropriate for your environment
+class Genkeys():
+    """ This class contains all methods of the opendkim-genkeys program """
 
-# Directory that OpenDKIM key files will be placed in on the mail server
-opendkim_dir = '/etc/opendkim/keys'
+    VERSION = "2.0.0"
 
-# Working directory for data files
-working_dir = ''
+    def __init__(self):
+        self.args = None
+        self.config = None
+        self.dns_api_data = {}
+        self.domain_data = None
+        self.logger = logging.getLogger(__name__)
+        self.key_table_length = 0
+        self.signing_table_length = 0
+        self.dns_apis = {
+            "null" : []
+        }
+        self.key_names = None
+        self.key_data = None
+        self.dns_api_extra = {}
 
-# Set this to True if you never want to have the script update DNS records for you
-never_update_dns = False
+    def read_config(self, config_path):
+        """Reads the configuration from the given configuration path and sets the default
+        configuration"""
+        # Directory that OpenDKIM key files will be placed in on the mail server
+        self.config = {
+            "opendkim_dir" : "/etc/opendkim",
+            "working_dir" : "",
+            "update_dns" : True,
+            "domain_file_name" : "domains.yml",
+            "dns_api_defs_filename" : "dnsapi.yml",
+            "dns_api_extra_data_file_name" : "dnsapi_extra.yml",
+            "dns_update_data_file_name" : "dns_update_data.yml",
+            "key_table" : "key.table",
+            "signing_table" : "signing.table",
+            "key_directory" : "/etc/opendkim/keys",
+            "cleanup_files" : True,
+            "day_difference" : 70,
+            "store_in_new_files" : False,
+            "no_write_file" : False
+        }
 
-# End of normal configuration settings
-# ======================================================================
+        try:
+            self.config.update(yaml.safe_load(open(config_path, "r")))
+        except Exception as exception:
+            logging.warning("Failed to load config from %s, resuming with defaults.", config_path)
 
-# Internal settings, should not need changed
-domain_filename = 'domains.ini'
-dns_api_defs_filename = 'dnsapi.ini'
-dns_update_data_filename = 'dns_update_data.ini'
+    def read_dns_api(self):
+        """Reads the dns API configuration file """
+        # @returns Bool True if reading succeeded, False if it did not succeed.
+        loaded_dns_api_data = {}
+        try:
+            # dns_api_data files are now yml files, not ini files
+            loaded_dns_api_data = yaml.safe_load(open(self.config["dns_api_defs_filename"], "r"))
+            if not isinstance(loaded_dns_api_data, dict):
+                self.logger.error(
+                    "Incorrect file format in file %s, it needs to contain a dict. Aborting.",
+                    self.config["dns_api_defs_filename"])
+                sys.exit(1)
 
-VERSION = '1.5.1'
+        except Exception as exception:
+            if not self.config["update_dns"]:
+                logging.critical("Failed to load dns API definitions, aborting!")
+                logging.critical("Exception: %s", exception)
+                return False
+        self.dns_api_data.update(loaded_dns_api_data)
+        return True
 
+    # @returns Bool True if reading succeeded, False if it did not succeed.
+    def read_domain_data(self):
+        """Reads the domain data yaml file from self.config["domain_file_name"] """
+        # api and parameters are stored in the file, which is a dictionary of the domains,
+        # looks like this in Python {
+        #   "example.com" : {
+        #       "api" : "null",
+        #       "parameters" : ["foo", "bar"]
+        #       }
+        #   }
 
-# Creates the private-key file, and the public-key txt-record file in chunked (BIND) form.
-# Returns a public key record dict, or None in the event of an error:
-#   selector: real selector value used if asked to avoid overwrites instead of failing
-#   plain:    unquoted unchunked data
-#   chunked:  BIND-format quoted chunked data
-def gen_key( target_name, selector, find_unused_selector = False ):
-    # Check for existence of resulting files and handle it
-    suffix_list = ['']
-    if find_unused_selector:
-        suffix_list += list( string.ascii_uppercase )
-    real_selector = None
-    for suffix in suffix_list:
-        rs = selector + suffix
-        private_key_filename = target_name + "." + rs + ".key"
-        public_key_filename = target_name + "." + rs + ".txt"
-        if (not os.path.exists( private_key_filename )) and (not os.path.exists( public_key_filename )):
-            real_selector = rs
-            break
-    if real_selector is None:
-        logging.critical( "Files for %s selector %s already exist", target_name, selector )
-        return None
-    # Cannot get to this point without having valid public and private key filenames assigned.
-    if real_selector != selector:
-        logging.warning( "Avoided overwriting keys for %s by using selector %s", target_name, real_selector )
+        try:
+            self.domain_data = yaml.safe_load(open(self.config["domain_file_name"], "r"))
+        except Exception as exception:
+            logging.critical("Failed to load domain configuration, aborting!")
+            logging.critical("Exception: %s", exception)
+            return False
 
-    # Use the OpenDKIM tool to generate the key data files
-    try:
-        wait_status = os.system( "opendkim-genkey -b 2048 -r -s " + selector + " -d " + target_name )
-    except OSError as e:
-        logging.critical( "Error running opendkim-genkey" )
-        logging.error( "%s", str( e ) )
-        return None
-    status = (wait_status & 0xFF00) >> 8
-    if status != 0:
-        logging.critical( "Error status %d returned by opendkim-genkey", status )
-        return None
+        logging.info("%s", self.domain_data)
+        if self.domain_data is None:
+            logging.critical("No domain definitions found.")
+            return False
+        # find any domains without configured api and set it to "null"
+        for domain_data in self.domain_data.values():
+            domain_data.setdefault("api", "null")
+            domain_data.setdefault("parameters", [])
 
-    # The private key always ends up as target_name.selector.key
-    try:
-        os.rename( selector + ".private", private_key_filename )
-    except OSError as e:
-        logging.critical( "Cannot rename the private key file %s.private", selector )
-        logging.error( "%s", str( e ) )
-        return None
+        return True
 
-    # Read opendkim-genkey's file and reformat the public key
+    def read_key_table(self):
+        """ reads the key table (default is key.table) from the opendkim configuration directory
+            @returns False or Dict of key name : {keyName, domain, selector, PathToKeyFile } """
 
-    # Snarf in the public key file for processing
-    try:
-        pubkey_file = open( selector + ".txt", 'r' )
-    except IOError as e:
-        logging.critical( "Error accessing the public key file %s.txt", selector )
-        logging.error( "%s", str( e ) )
-        return None
-    input_text = pubkey_file.read()
-    pubkey_file.close()
-    if len( input_text ) <= 0:
-        logging.critical( "No input found" )
-        return None
+        with open(self.config["opendkim_dir"] + "/" +  self.config["key_table"], "r") as file:
+            # the file contains nested structures as follows:
+            # all entries
+            #   key name
+            #   domain
+            #   selector
+            #   path to keyfile
 
-    # Find the first double-quote, and the double-quote after it. If we can't
-    # find the first one, we're either done (if we processed at least one chunk
-    # of data) or we have a syntax problem. If we can't find the second one, we
-    # definitely have a syntax problem. If we found both, extract the chunk of
-    # data between them and add it to the accumulated key data value (with or
-    # without the enclosing quotes and spacing depending on the format). Repeat
-    # until we can't find an opening double-quote.
-    value = ''
-    chunked_value = ''
-    start = 0
-    while start >= 0:
-        first_quote = input_text.find( '"', start )
-        if first_quote >= start:
-            second_quote = input_text.find( '"', first_quote + 1 )
-        else:
-            if len( value ) == 0:
-                # Error, we couldn't find the start
-                logging.critical( "Cannot find start of DNS record value" )
+            # the dictionary holds the values in correspondingly named keys
+            key_table_entries = {}
+            for line in file.readlines():
+                tokens = line.split()
+                if len(tokens) == 2:
+                    key_name = tokens[0]
+                    colon_parts = tokens[1].split(":")
+                    if len(colon_parts) == 3:
+                        new_entry = {
+                            "key_name" : tokens[0],
+                            "domain" : colon_parts[0],
+                            "selector" : colon_parts[1],
+                            "path_to_keyfile" : colon_parts[2]
+                            }
+                        key_table_entries[key_name] = new_entry
+                    else:
+                        logging.warning(
+                            "Encountered improperly formatted line discarding it: %s", line)
+                else:
+                    logging.warning("Encountered improperly formatted line discarding it: %s", line)
+
+            self.key_table_length = len(key_table_entries)
+            return key_table_entries
+        return False
+
+    def read_dns_update_data(self, filename: str):
+        """
+        @input filename Path to yaml file to read
+        @returns dict/list deserialised yaml object. The format is a list of objects with the
+        following keys:
+        domain_name, selector, creation_time, module_specific_information
+        """
+        file_contents = None
+        try:
+            file_contents = yaml.safe_load(open(filename, "r"))
+        except Exception as exception:
+            logging.warning("Failed to read DNS update data file. Resuming without it.")
+            logging.warning("Exception: %s", exception)
+            return []
+        self.logger.debug("dns update data contents %s", file_contents)
+        return file_contents
+
+    def get_key_names(self):
+        """ Get all key names from the key file """
+        key_names = []
+        for domain_data in self.domain_data.values():
+            key_name = domain_data.get("key")
+            if key_name is not None and key_name not in key_names:
+                key_names.append(key_name)
+        return key_names
+
+    @classmethod
+    def make_dkim_record_name(cls, selector: str, domain:str):
+        """
+        Generate the DNS record name for the selector and domain
+        """
+        return "%s._domainkey.%s" % (selector, domain)
+
+    @classmethod
+    def make_dkim_record_content(cls, public_key: str, version="DKIM1"):
+        return [ ("v", version), ("h", "sha256"), ("k", "rsa"), ("s", "email"), ("p", public_key) ]
+
+    def generate_keys(self, selector: str):
+        """ Generate all keys """
+        generated_key_data = {}
+        for key in self.key_names:
+            self.logger.info("Generating key %s", key)
+            key_data = self.generate_singular_key(key, selector)
+            if key_data is None:
+                logging.critical("Error generating key %s", key)
+                return False
+            generated_key_data[key] = key_data
+        self.logger.debug("generated key data contents %s", generated_key_data)
+        return generated_key_data
+
+    def generate_singular_key(self, key, selector, key_kength=2048):
+        """ generate the key pair using openssl rsa """
+
+        new = False
+        private_key_file_name = "{}/{}.{}.key".format(self.config["key_directory"], key,
+                                                      selector)
+        if not os.path.exists(private_key_file_name):
+            self.logger.info("File %s for selector %s (key %s) does not exist yet, generating it.",
+                             private_key_file_name, key, selector)
+            # file does not exist
+            process = subprocess.run(["openssl", "genrsa", "-out", private_key_file_name, "--",
+                                      str(key_kength)], stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE)
+            if process.returncode:
+                self.logger.error(
+                    "openssl genrsa failed with returncode %s and the following error output: %s",
+                    process.returncode, process.stderr)
                 return None
             else:
-                # We're done when we can't find the start of the next chunk
-                break
-        if second_quote >= 0:
-            # Unchunked form
-            value += input_text[first_quote + 1:second_quote]
-            # Chunked form
-            if len( chunked_value ) > 0:
-                chunked_value += ' '
-            chunked_value += input_text[first_quote:second_quote + 1]
-            start = second_quote + 1
+                new = True
         else:
-            logging.error( "Syntax error in record data: no closing quote found" )
-            break
+            logging.warning("Files for key %s selector %s already exist", key, selector)
 
-    # We should've found at least one chunk of key data
-    if len( value ) == 0:
-        logging.critical( "No DNS record value found" )
-        return None
+        # convert to public key then generate TXT record, write and use it
+        process = subprocess.run(["openssl", "rsa", "-in", private_key_file_name, "-pubout",
+                                  "-outform", "PEM"], stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
 
-    output_file = open( public_key_filename, 'w' )
-    output_file.write( chunked_value + '\n' )
-    output_file.close()
+        if process.returncode:
+            self.logger.error("openssl rsa failed with returncode %s and the following error"
+                              "output: %s", process.returncode, process.stderr)
+            return None
 
-    # Clean up the file opendkim-genkey created, we don't need it anymore
-    try:
-        os.remove( selector + ".txt" )
-    except OSError as e:
-        logging.error( "Could not delete origin file %s.txt", selector )
-        logging.error( "%s", str( e ) )
-        return None
+        # public key is now in stdout, split by newline characters
+        lines = process.stdout.decode("utf-8").split("\n")
+        # strip first and last line (those are the PEM file format header and trailer)
+        public_key_chunked = " ".join(lines[1:-2])
+        # split every 250 characters
+        return {
+            "new" : new,
+            "selector" : selector,
+            "plain" : public_key_chunked.replace(" ", ""),
+            "chunked" : public_key_chunked
+        }
 
-    return { 'selector': real_selector, 'plain': value, 'chunked': chunked_value }
+    def test_dns_servers(self, dns_record_name: str, dns_record_content: str, domain: str, domain_key: str):
+        """Check if the given record name has the given content for the domain's configured DNS servers """
+        ret = True
+        servers = self.domain_data[domain].get("dns_servers")
+        if servers:
+            for server in servers:
+                ret &= self.test_single_dns_server(dns_record_name, dns_record_content, server)
+        return ret
 
-
-def process_ini_file( filename, critical = True ):
-    # Snarf in the contents
-    try:
-        ini_file = open( filename, 'r' )
-        input_lines = ini_file.readlines()
-    except IOError as e:
-        if critical:
-            logging.critical( "Error accessing file %s", filename )
-            logging.error( "%s", str( e ) )
-        else:
-            logging.warning( "Error accessing file %s", filename )
-            logging.warning( "%s", str( e ) )
-        return None
-    ini_data = []
-    for line in input_lines:
-        fields = line.split()
-        if fields != None and len( fields ) > 0 and len( fields[0] ) > 0 and fields[0][0] != '#':
-            ini_data.append( fields )
-    return ini_data
-
-
-def fields_to_line( fields ):
-    line = ""
-    for field in fields:
-        if len( line ) > 0:
-            line += '\t'
-        if isinstance( field, datetime.datetime ):
-            line += field.strftime( '%Y-%m-%dT%H:%M:%S' )
-        else:
-            line += str( field )
-    return line
-
-
-def write_ini_file( filename, records ):
-    try:
-        ini_file = open( filename, 'w' )
-    except IOError as e:
-        logging.critical( "Error writing file %s", filename )
-        logging.error( "%s", str( e ) )
-        return
-    for record in records:
-        line = fields_to_line( record ) + '\n'
-        ini_file.write( line )
-    ini_file.close()
-    return
-
-
-def find_key_for_domain( domain_data, domain ):
-    for domain_entry in domain_data:
-        if domain_entry[0] == domain:
-            return domain_entry[1]
-    return None
-
-
-def find_dnsapi_modules( pn ):
-    # Go through all possible names (pulled from what's mentioned in the
-    # dnsapi.ini file) and for each one X see if we can load a module named
-    # dnsapi_X (file will be dnsapi_X.py).
-    dnsapis = { }
-    possible_names = pn
-    # Make sure null is included
-    if 'null' not in possible_names:
-        possible_names.append( 'null' )
-    for api_name in possible_names:
-        module_name = "dnsapi_" + api_name
+    def test_single_dns_server(self, dns_record_name, dns_record_content, server):
+        """ check if the given record can be resolved on the given server """
         try:
-            module = importlib.import_module( module_name )
-        except ImportError as e:
-            module = None
-            logging.error( "Module %s for DNS API %s not found", module_name, api_name )
-            logging.info( "%s", str( e ) )
-        if module is not None:
-            logging.debug( "DNS API module %s loaded", api_name )
-            dnsapis[api_name] = module
-    return dnsapis
+            proc = subprocess.run(
+                ["dig", "+short", "TXT", dns_record_name, "@%s" % server],
+                stdout=subprocess.PIPE)
+            stdout = proc.stdout.decode("utf-8")
+            self.logger.debug("Received from dig via stdout: %s", stdout)
+            if not proc.returncode:
+                logging.debug("Received from %s TXT value %s", server, stdout)
+                # basically join split strings
+                stdout = stdout.replace("\" \"", "").replace(";", "").replace("\"", "")
+                parameters = stdout.split(" ")
+                pairs = []
+                for token in parameters:
+                    token_1, token_2 = token.split("=")
+                    pairs.append((token_1.replace("\n", ""), token_2.replace("\n", "")))
 
+                # sort provided and parsed lists
+                pairs.sort(key=lambda x: x[0], reverse=False)
+                dns_record_content.sort(key=lambda x: x[0], reverse=False)
+                for key_val_1, key_val_2 in zip(pairs, dns_record_content):
+                    if key_val_1[0] != key_val_2[0] or key_val_1[1] != key_val_2[1]:
+                        logging.error("Answer and provided content differ: %s != %s",
+                                      key_val_1, key_val_2)
+                        return False
+                return True
+            return False
+        except Exception as exception:
+            logging.error("An exception occured: %s", exception)
+            return False
 
-# Set up command-line argument parser and parse arguments
-parser = argparse.ArgumentParser( description = "Generate OpenDKIM key data for a set of domains" )
-parser.add_argument( "-v", "--verbose", dest = 'log_info', action = 'store_true',
-                     help = "Log informational messages in addition to errors" )
-parser.add_argument( "-n", "--next-month", dest = 'next_month', action = 'store_true',
-                     help = "Use next month's date for automatically-generated selectors" )
-parser.add_argument( "-a", "--avoid-overwrite", dest = 'avoid_collisions', action = 'store_true',
-                     help = "Add a suffix to the selector if needed to avoid overwriting existing files" )
-parser.add_argument( "-s", "--selector", dest = 'output_selector', action = 'store_true',
-                     help = "Causes the generated selector to be output" )
-parser.add_argument( "--working-dir", dest = 'working_dir', action = 'store',
-                     help = "Set the working directory for DKIM data files" )
-parser.add_argument( "--no-dns", dest = 'update_dns', action = 'store_false',
-                     help = "Do not update DNS data" )
-parser.add_argument( "--no-cleanup", dest = 'cleanup_files', action = 'store_false',
-                     help = "Do not delete old key files" )
-parser.add_argument( "--debug", dest = 'log_debug', action = 'store_true',
-                     help = "Log debugging info and do not update DNS" )
-parser.add_argument( "--use-null", dest = 'use_null_dnsapi', action = 'store_true',
-                     help = "Silently use the null DNS API instead of the real API" )
-parser.add_argument( "--version", dest = 'display_version', action = 'store_true',
-                     help = "Display the program version" )
-parser.add_argument( "selector", nargs = '?', default = None, help = "Selector to use" )
-# parser.add_argument("domains", nargs=argparse.REMAINDER, help="List of domains to process")
-args = parser.parse_args()
+    def generate_selector(self):
+        """Generate the selector for this month based upon the date"""
+        selector_date = datetime.date.today().replace(day=1)
+        if self.args.next_month:
+            year = selector_date.year
+            month = selector_date.month
+            month += 1
+            if month > 12:
+                month = 1
+                year += 1
+            selector_date = selector_date.replace(year=year, month=month)
+        return selector_date.strftime("%Y%m")
 
-if args.display_version:
-    print( "OpenDKIM genkeys.py v{0}".format( VERSION ) )
-    sys.exit( 0 )
+    def find_dns_api_modules(self):
+        """Find all available DNS API modules (they're in the src directory"""
+        # Go through all possible names (pulled from what"s mentioned in the
+        # dnsapi.yml file) and for each one X see if we can load a module named
+        # dnsapi_X (file will be dnsapi_X.py).
+        dns_apis = {}
+        possible_names = self.dns_api_data.keys()
+        should_update_dns = True
 
-if args.log_info:
-    level = logging.INFO
-else:
-    level = logging.WARN
-if args.log_debug:
-    level = logging.DEBUG
-
-should_update_dns = args.update_dns
-if never_update_dns:
-    should_update_dns = False
-
-should_output_selector = args.output_selector
-if should_output_selector:
-    should_update_dns = False
-    level = logging.ERROR
-
-avoid_collisions = args.avoid_collisions
-if args.working_dir:
-    working_dir = args.working_dir
-
-logging.basicConfig( level = level, format = "%(levelname)s: %(message)s" )
-
-# If we weren't given an explicit selector, the default is YYYYMM based on
-# either this month or next month.
-selector = args.selector
-if selector is None:
-    selector_date = datetime.date.today().replace( day = 1 )
-    if args.next_month:
-        y = selector_date.year
-        m = selector_date.month
-        m += 1
-        if m > 12:
-            m = 1
-            y += 1
-        selector_date = selector_date.replace( year = y, month = m )
-    selector = selector_date.strftime( "%Y%m" )
-logging.info( "Selector: %s", selector )
-if should_output_selector:
-    print( selector )
-    sys.exit( 0 )
-
-# Set working directory
-if working_dir:
-    logging.info( "Setting working directory to %s", working_dir )
-    os.chdir( working_dir )
-
-# Process dnsapi.ini
-# If we're supposed to update DNS records but don't have any definitions for
-# the DNS APIs, we record an error but we can continue to generate the keys
-# and public key files anyway. The admin will just have to update the DNS
-# records manually.
-dnsapi_info = { }  # Key = DNS API name, Value = remainder of fields
-dnsapi_data = process_ini_file( dns_api_defs_filename )
-if dnsapi_data is None and should_update_dns:
-    logging.error( "No DNS API definitions found in %s", dns_api_defs_filename )
-    should_update_dns = False
-else:
-    for item in dnsapi_data:
-        dnsapi_info[item[0]] = item[1:len( item )]
-# Insure we have the null API
-if dnsapi_info['null'] is None:
-    dnsapi_info['null'] = []
-
-# Process domains.ini
-domain_data = process_ini_file( domain_filename )
-if domain_data is None:
-    logging.critical( "No domain definitions found in %s", domain_filename )
-    sys.exit( 1 )
-# Make all domains with no API specified use the null API
-for item in domain_data:
-    if len( item ) < 3 or item[2] is None:
-        item[2] = 'null'
-# We'll need a list of all the key names used by domains
-key_names = []
-for item in domain_data:
-    if item[1] not in key_names:
-        key_names.append( item[1] )
-
-# Generate our keys, one per key name
-keys = { }  # Key = key name (field 1) from domain_data[n], Value = key data dict
-for target in key_names:
-    logging.info( "Generating key %s", target )
-    key_data = gen_key( target, selector, avoid_collisions )
-    if key_data is None:
-        logging.critical( "    Error generating key %s", target )
-        sys.exit( 1 )
-    keys[target] = key_data
-# That also gives us the private key and public key txt files needed
-
-# Read contents of the existing key table file in case we need to leave existing
-# lines in place because of a DNS update failure
-key_table_data = process_ini_file( "key.table", False )
-if key_table_data == None:
-    key_table_data = []
-
-# Check for our DNS API modules. If we don't have any, there's no sense in
-# trying to do automatic updating even if we're supposed to.
-if should_update_dns:
-    dnsapis = find_dnsapi_modules( dnsapi_info.keys() )  # Key = DNS API name, Value = module
-    if len( dnsapis ) == 0:
-        logging.warning( "No DNS API modules found at %s", os.path.dirname( __file__ ) )
-        should_update_dns = False
-
-if should_update_dns:
-    update_data = process_ini_file( dns_update_data_filename, False )
-
-    if update_data is not None:
-        # Convert update data timestamp field to a datetime
-        for record in update_data:
-            if record[2] is not None:
-                dt = datetime.datetime.strptime( record[2], '%Y-%m-%dT%H:%M:%S' )
-                record[2] = dt
-
-    logging.info( "Updating DNS records" )
-    # Discard records older than 10 weeks (roughly the midpoint of the month 2 months ago),
-    # which should retain the last 2 records and discard the 3rd and older record if a monthly
-    # rotation is in use.
-    cutoff_delta = datetime.timedelta( 70 )
-    cutoff = datetime.datetime.now() - cutoff_delta
-    failed_domains = []
-    for item in domain_data:
-        if len( item ) > 2:
-            dnsapi_name = item[2]
-            dnsapi_domain_data = item[3:len( item )]
+        for api_name in possible_names:
+            module_name = "dnsapi_" + api_name
             try:
-                if args.use_null_dnsapi:
-                    if dnsapi_name == 'fail':
-                        dnsapi_module = dnsapis[dnsapi_name]
+                module = importlib.import_module(module_name)
+            except ImportError as exception:
+                module = None
+                self.logger.error("Module %s for DNS API %s not found", module_name, api_name)
+                self.logger.info("%s", str(exception))
+            if module is not None:
+                self.logger.debug("DNS API module %s loaded", api_name)
+                dns_apis[api_name] = module
+        if not dns_apis:
+            logging.warning("No DNS API modules found at %s", os.path.dirname(__file__))
+            should_update_dns = False
+
+        return dns_apis, should_update_dns
+
+    def load_dns_api_module_extra_data(self):
+        """
+        Reads the dns_api_extra_data_file_name. It has to contain a dict
+        indexed by the api names after which anything else can occur.
+        """
+        try:
+            # dns_api_data files are now yml files, not ini files
+            loaded_dns_api_extra = yaml.safe_load(
+                open(self.config["dns_api_extra_data_file_name"], "r"))
+            if not isinstance(loaded_dns_api_extra, dict):
+                self.logger.error(
+                    "Incorrect file format in file %s, it needs to contain a dict. Aborting.",
+                    self.config["dns_api_extra_data_file_name"])
+                sys.exit(1)
+            self.dns_api_extra.update(loaded_dns_api_extra)
+
+        except Exception as exception:
+            if not self.config["update_dns"]:
+                logging.warning("Failed to load dns API extra data!")
+                logging.warning("Exception: %s", exception)
+        return True
+
+    def save_dns_api_module_extra_data(self):
+        return self.write_file(self.config["dns_api_extra_data_file_name"], self.dns_api_extra)
+
+    def initialize_dns_api_modules(self):
+        for module_name, module in self.dns_apis.items():
+            if hasattr(module, "init"):
+                self.dns_api_extra[module_name] = module.init(self.dns_api_extra.get(module_name))
+
+    def finish_dns_api_modules(self):
+        for module_name, module in self.dns_apis.items():
+            if hasattr(module, "finish"):
+                module.finish(self.dns_api_extra.get(module_name))
+
+    @classmethod
+    def get_dns_update_data(cls, update_data, domain_name):
+        ret = []
+        for index, candidate in zip(range(0, len(update_data)), update_data):
+            if candidate.get("domain_name") == domain_name:
+                ret.append((index, candidate))
+        return ret
+
+    def cleanup_files(self, update_data: list, dns_domain_data: dict, key_data: dict,
+        dns_api_module_name: str, day_difference: int):
+        """ Remove old records from config files and remove old records from DNS"""
+        removed_count = 0
+        to_remove = []
+        cutoff = datetime.datetime.today() - datetime.timedelta(day_difference)
+        all_matching_records = self.get_dns_update_data(update_data, key_data["domain"])
+        for index_and_record in  all_matching_records:
+            date = index_and_record[1].get("creation_time")
+            if date < cutoff:
+                if removed_count == 0:
+                    self.logger.info("Removing old records for %s", key_data["domain"])
+                removed_count += 1
+                result = self.dns_apis[dns_api_module_name].delete(
+                    self.dns_api_data[dns_domain_data["api"]]["parameters"],
+                    dns_domain_data, all_matching_records[1],
+                    self.dns_api_extra.get(dns_api_module_name),
+                    self.args.log_debug)
+                if result is None:
+                    self.logger.info(
+                        "No support for removing old record for %s:%s via %s API",
+                        all_matching_records[1]["domain"], all_matching_records[1]["key"],
+                        dns_domain_data["api"])
+                elif result:
+                    # call returned True
+                    self.logger.info(
+                        "Removing %s:%s created at %s", all_matching_records[1]["domain"],
+                        all_matching_records[1]["key"], index_and_record[1]["date"].strftime("%Y-%m-%d"))
+                    to_remove.append(all_matching_records[0])
+                else:
+                    # call returned False
+                    self.logger.error(
+                        "Error removing old record for %s:%s via %s API",
+                        all_matching_records[1]["domain"], all_matching_records[1]["key"],
+                        dns_domain_data["api"])
+                    # Preserve record if we encountered an error
+        to_remove.sort(key=lambda x: x, reverse=True)
+        for i in to_remove:
+            update_data.pop(i)
+
+    def write_file(self, file: str, data):
+        """
+        Write the data into file as yaml object using yaml.safe_dump, catch exceptions and log them
+        """
+        try:
+            with open(file, "w") as handle:
+                yaml.safe_dump(data, handle)
+        except IOError as exception:
+            self.logger.error("Failed to write to %s due to IO exception %s", file, exception)
+        except Exception as exception:
+            self.logger.error("Failed to write to %s due to general exception %s", file, exception)
+
+    def update_domain(self, domain: str, failed_domains: list, update_data: list,
+                      should_update_dns: bool):
+        """
+        Update the specified domain, cleanup outdated files
+        """
+        # work on every domain where an API with parameters is defined (have api and parameters)
+        domain_data = self.domain_data.get(domain)
+        dns_apis = self.dns_apis
+        if domain_data.get("api"):
+            dns_api_name = domain_data["api"]
+            dns_api_parameters = domain_data.get("parameters")
+            dns_api_module = None
+            # If the null API is to be used, set every domain's API to null or fail
+            if self.args.use_null_dnsApi:
+                if "fail" in self.dns_apis:
+                    dns_api_module = dns_apis["fail"]
+                else:
+                    dns_api_module = dns_apis["null"]
+            else:
+                dns_api_module = dns_apis.get(dns_api_name)
+
+            # if the API is available, apply the update
+            if dns_api_module:
+                self.logger.debug("Found DNS module %s for %s", dns_api_module, domain)
+                dns_api_data = self.dns_api_data[dns_api_name]
+                key_data = self.key_data[domain_data["key"]].copy()
+
+                if dns_api_data and key_data:
+                    key_data["domain"] = domain
+
+                if self.config["cleanup_files"] and update_data is not None:
+                    self.cleanup_files(update_data,
+                                       domain_data, key_data, dns_api_module, 70)
+
+                if should_update_dns:
+                    dns_record_name = self.make_dkim_record_name(key_data["selector"], domain)
+                    dns_record_content = self.make_dkim_record_content(key_data["plain"])
+                    # Add new record
+                    self.logger.info("Updating selector %s for %s with key %s",
+                                     key_data["selector"], domain, domain_data["key"])
+                    result = dns_api_module.add(dns_api_data, dns_api_parameters, key_data,
+                                                self.dns_api_extra[dns_api_name],
+                                                self.args.log_debug)
+                    record_available = self.test_dns_servers(
+                        dns_record_name, dns_record_content, domain, domain_data["key"])
+                    if not record_available:
+                        logging.warning(
+                            "Record %s is not available on its configured DNS servers. Skipping update.",
+                            dns_record_name)
+                        failed_domains.append(domain)
+                    if result[0] and record_available:
+                        self.logger.info("Update succeeded.")
+                        # remove old record
+                        # only add if key is new
+                        if key_data["new"]:
+                            update_data.append({
+                                "domain_name" : domain,
+                                "selector" : key_data["selector"],
+                                "creation_time" : datetime.datetime.today().strftime("%Y-%m-%d"),
+                                "module_specific_information" : None
+                            })
                     else:
-                        dnsapi_module = dnsapis['null']
-                else:
-                    dnsapi_module = dnsapis[dnsapi_name]
-                dnsapi_data = dnsapi_info[dnsapi_name]
-                key_data = keys[item[1]].copy()
-            except KeyError:
-                dnsapi_module = None
-                dnsapi_data = None
-                key_data = None
-            if dnsapi_module is None:
-                logging.error( "No DNS API %s found for %s", dnsapi_name, item[0] )
-            if dnsapi_module is not None and dnsapi_data is not None and key_data is not None:
-                key_data['domain'] = item[0]
-                key_data['dnsapi'] = dnsapi_name
-                if args.cleanup_files and update_data is not None:
-                    # Clean up old records
-                    removed_count = 0
-                    new_update_data = []
-                    for record in update_data:
-                        if record[0] == item[0] and record[2] < cutoff:
-                            if removed_count == 0:
-                                logging.info( "Removing old records for %s", item[0] )
-                            removed_count += 1
-                            result = dnsapi_module.delete( dnsapi_data, dnsapi_domain_data, record, args.log_debug )
-                            if result is None:
-                                logging.info( "No support for removing old record for %s:%s via %s API",
-                                              record[0], record[1], dnsapi_name )
-                                # Preserve record if we encountered an error
-                                new_update_data.append( record )
-                            elif result:
-                                logging.info( "Removing %s:%s created at %s", record[0], record[1],
-                                              record[2].strftime( '%Y-%m-%d %H:%M:%S' ) )
-                            else:
-                                logging.error( "Error removing old record for %s:%s via %s API",
-                                               record[0], record[1], dnsapi_name )
-                                # Preserve record if we encountered an error
-                                new_update_data.append( record )
-                        else:
-                            new_update_data.append( record )
-                    update_data = new_update_data
-                # Add new record
-                logging.info( "Updating selector %s for %s with key %s", key_data['selector'], item[0], item[1] )
-                result = dnsapi_module.add( dnsapi_data, dnsapi_domain_data, key_data, args.log_debug )
-                if result[0]:
-                    logging.info( "Update succeeded." )
-                    records = list( result[1:] )
-                    if update_data is None:
-                        update_data = []
-                    update_data.append( records )
-                else:
-                    logging.error( "Error adding new record for %s with key %s via %s API",
-                                   item[0], item[1], dnsapi_name )
-                    failed_domains.append( item[0] )
+                        self.logger.error("Error adding new record for %s with key %s via %s API",
+                                          domain, domain_data["key"], dns_api_name)
 
-    if update_data is not None:
-        write_ini_file( dns_update_data_filename, update_data )
+                        failed_domains.append(domain)
+            else:
+                self.logger.error("Configured DNS API %s of %s not found!", dns_api_name,
+                                  domain_data["api"])
+                failed_domains.append(domain)
 
-        if args.cleanup_files:
+    def update_dns(self, should_update_dns: bool):
+        update_data = self.read_dns_update_data(self.config["dns_update_data_file_name"])
+        failed_domains = []
+        if update_data is not None:
+            # Convert update data timestamp field to a datetime
+            for record in update_data:
+                date = record.get("creation_time")
+                if isinstance(date, str):
+                    record["creation_time"] = datetime.datetime.strptime(date, "%Y-%m-%d")
+        else:
+            # create dns update data
+            try:
+                if self.config["store_in_new_files"]:
+                    open(self.config["dns_update_data_file_name"] + ".new", "w")
+                else:
+                    open(self.config["dns_update_data_file_name"], "w")
+            except:
+                self.logger.error("Failed to create %s", self.config["dns_update_data_file_name"])
+            update_data = []
+
+        self.logger.info("Updating DNS records")
+        # Discard records older than 10 weeks (roughly the midpoint of the month 2 months ago),
+        # which should retain the last 2 records and discard the 3rd and older record if a monthly
+        # rotation is in use.
+
+        for domain in self.domain_data.keys():
+            self.update_domain(domain, failed_domains, update_data, should_update_dns)
+
+        if self.config["cleanup_files"]:
+            self.write_file(self.config["dns_update_data_file_name"], update_data)
             target_list = []
-            # Find all files that match the name pattern for one of our domain name abbreviations
-            for target in key_names:
-                target_list += glob.glob( target + '.*.key' ) + glob.glob( target + '.*.txt' )
-            # Go through the update data and remove the entries from target_list that're still referred
-            # to by an update_data item.
-            for item in update_data:
-                if len( item ) < 2:
+            # Find all files that match the name pattern for one of our
+            # domain name abbreviations
+            for target in self.key_names:
+                target_list += glob.glob(target + ".*.key") + glob.glob(target + ".*.txt")
+            # Go through the update data and remove the entries from target_list that are
+            # still referred to by an update_data item.
+            for domain_update_data in update_data:
+                # if there are insufficient parameters in the object, it is skipped.
+                # It needs to have at least a domain name and a selector
+                if len(domain_update_data) < 2:
+                    self.logger.debug("Skipping domain because of too few parameters")
                     continue
-                domain_key = find_key_for_domain( domain_data, item[0] )
+
+                domain_key = self.domain_data.get(domain_update_data["domain_name"])
                 if domain_key is not None:
-                    for suffix in ['.key', '.txt']:
-                        item_str = domain_key + '.' + item[1] + suffix
+                    for suffix in [".key", ".txt"]:
+                        item_str = domain_key["key"] + "." + domain_update_data["selector"] + suffix
                         try:
-                            i = target_list.index( item_str )
+                            i = target_list.index(item_str)
                         except:
                             i = -1
                         if i >= 0:
                             del target_list[i]
             # Don't clean entries for domains that failed the DNS update
-            for item in failed_domains:
-                domain_key = find_key_for_domain( domain_data, item )
-                if domain_key is not None:
-                    new_list = [x for x in target_list if not x.startswith( domain_key + '.' )]
+            for failed_domain in failed_domains:
+                domain_key_str = self.domain_data.get(failed_domain)
+                if domain_key_str:
+                    new_list = [x for x in target_list if not x.startswith(domain_key_str + ".")]
                     target_list = new_list
-            # What's left in target_list are just the files that aren't referred to anymore and are
-            # eligible for being deleted.
+            # What's left in target_list are just the files that aren't referred to anymore and
+            # are eligible for being deleted.
             for filename in target_list:
-                logging.info( "Removing obsolete file %s", filename )
+                self.logger.info("Removing obsolete file %s", filename)
                 try:
-                    os.remove( filename )
+                    os.remove(filename)
                 except:
-                    logging.warning( "Failed removing obsolete file %s", filename )
+                    logging.warning("Failed to remove obsolete file %s", filename)
+        return failed_domains
 
-# Generate the key.table and signing.table files
-logging.info( "Generating key and signing tables" )
-try:
-    key_table_file = open( "key.table", 'w' )
-    signing_table_file = open( "signing.table", 'w' )
-except IOError as e:
-    logging.critical( "Error creating new key or signing table file" )
-    logging.error( "%s", str( e ) )
-    sys.exit( 1 )
-# Write the unupdated entries back to the files
-for key_item in key_table_data:
-    key_domain = key_item[1].split( ':' )[0]
-    if key_domain in failed_domains:
-        logging.info( "Preserving entries for %s", key_domain )
-        try:
-            key_table_file.write( "%s\n" % (fields_to_line( key_item )) )
-            signing_table_file.write( "*@%s\t%s\n" % (key_domain, key_item[0]) )
-        except IOError as e:
-            logging.critical( "Error writing new key or signing table file" )
-            logging.error( "%s", str( e ) )
-            sys.exit( 1 )
-# Now write the updated lines to the files
-for item in domain_data:
-    if item[0] not in failed_domains:
-        code = item[0].replace( '.', '-' )
-        logging.info( "Adding entries for %s", item[0] )
-        try:
-            key_table_file.write( "%s\t%s:%s:%s/%s.%s.key\n" % \
-                                  (code, item[0], selector, opendkim_dir, item[1], selector) )
-            signing_table_file.write( "*@%s\t%s\n" % (item[0], code) )
-        except IOError as e:
-            logging.critical( "Error writing new key or signing table file" )
-            logging.error( "%s", str( e ) )
-            sys.exit( 1 )
-key_table_file.close()
-signing_table_file.close()
+    def write_tables(self, key_domain_table, selector, failed_domains):
+        """
+        Write the domain data and key domain table into key.table and signing.table in the
+        format opendkim expects
+        """
+        key_table_file_name = "key.table"
+        signing_table_file = "signing.table"
 
-sys.exit( 0 )
+        if self.config["store_in_new_files"]:
+            key_table_file_name += ".new"
+            signing_table_file += ".new"
+
+        try:
+            key_table_file = open(key_table_file_name, "w")
+            signing_table_file = open(signing_table_file, "w")
+        except IOError as exception:
+            logging.critical("Error creating new key or signing table file")
+            self.logger.error("%s", str(exception))
+            sys.exit(1)
+        # Write the unupdated entries back to the files
+        for key_domain_data in key_domain_table.values():
+            if key_domain_data["domain"] in failed_domains:
+                self.logger.info("Preserving entries for %s", key_domain_data["key_name"])
+                try:
+                    key_table_file.write(
+                        "%s\t%s:%s:%s\n" % (key_domain_data["key_name"], key_domain_data["domain"],
+                                            key_domain_data["selector"],
+                                            key_domain_data["path_to_keyfile"]))
+                    signing_table_file.write("*@%s\t%s\n" % (key_domain_data["domain"],
+                                                             key_domain_data["key_name"]))
+                except IOError as exception:
+                    logging.critical("Error writing new key or signing table file")
+                    self.logger.error("%s", str(exception))
+                    return False
+        # Now write the updated lines to the files
+        for domain, domain_data in self.domain_data.items():
+            if domain not in failed_domains:
+                code = domain.replace(".", "-")
+                self.logger.info("Adding entries for %s", domain)
+                try:
+                    key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
+                                          (code, domain, selector, self.config["opendkim_dir"] + "/keys",
+                                           domain_data["key"], selector))
+                    signing_table_file.write("*@%s\t%s\n" % (domain, code))
+                except IOError as exception:
+                    logging.critical("Error writing new key or signing table file")
+                    self.logger.error("%s", str(exception))
+                    return False
+        key_table_file.close()
+        signing_table_file.close()
+        return True
+
+    def parse_args(self):
+        # Set up command-line argument parser and parse arguments
+        parser = argparse.ArgumentParser(description="Generate OpenDKIM key data for a set of"
+                                         " domains")
+        parser.add_argument("-v", "--verbose", dest="log_info", action="store_true",
+                            help="Log informational messages in addition to errors")
+        parser.add_argument("-n", "--next-month", dest="next_month", action="store_true",
+                            help="Use next month's date for automatically-generated selectors")
+        parser.add_argument("-s", "--selector", dest="output_selector", action="store_true",
+                            help="Causes the generated selector to be output")
+        parser.add_argument("--working-dir", dest="working_dir", action="store",
+                            help="Set the working directory for DKIM data files",
+                            default="")
+        parser.add_argument("--opendkimDir", dest="opendkim_dir", action="store",
+                            help="The directory of the opendkim configuration",
+                            default="/etc/opendkim")
+        parser.add_argument("--key-directory", dest="key_directory", action="store",
+                            help="The directory of the opendkim keys directory",
+                            default="/etc/opendkim/keys")
+        parser.add_argument("--config", action="store",
+                            help="The path to the configuration file",
+                            default="/etc/opendkim-genkeys.yml")
+        parser.add_argument("--no-dns", dest="no_update_dns", action="store_false",
+                            default=argparse.SUPPRESS,
+                            help="Do not update DNS data")
+        parser.add_argument("--no-cleanup", dest="no_cleanup_files", action="store_false",
+                            default=argparse.SUPPRESS,
+                            help="Do not delete old key files")
+        parser.add_argument("--debug", dest="log_debug", action="store_true",
+                            help="Log debugging info and do not update DNS")
+        parser.add_argument("--use-null", dest="use_null_dnsApi", action="store_true",
+                            help="Silently use the null DNS API instead of the real API")
+        parser.add_argument("--no-write-file", dest="no_write_file", action="store_true",
+                            default=argparse.SUPPRESS,
+                            help="Disable writing any file changes to the key or signing table, or any of the yml files.")
+        parser.add_argument("--store-in-new-files", dest="store_in_new_files", action="store_true",
+                            default=argparse.SUPPRESS,
+                            help="Do not overwrite old key and signing table files or dns_update_data.yml files, but write new ones")
+        parser.add_argument("--version", dest="display_version", action="store_true",
+                            help="Display the program version")
+        parser.add_argument("selector", nargs="?", default=None, help="Selector to use")
+        parser.add_argument("domains", nargs=argparse.REMAINDER, help="List of domains to process")
+
+        self.args = parser.parse_args()
+        if self.args.display_version:
+            print("OpenDKIM genkeys %s" % self.VERSION)
+            sys.exit(0)
+
+    def overwrite_from_args(self):
+        if hasattr(self.args, "no_update_dns"):
+            self.logger.debug("Overwriting updating to dns from args: %s", self.args.update_dns)
+            self.config["should_update_dns"] = self.args.no_update_dns
+
+        if hasattr(self.args, "no_cleanup_files"):
+            self.logger.debug("Overwriting cleaning up old key files from args: %s", self.args.cleanup_files)
+            self.config["cleanup_files"] = self.args.no_cleanup_files
+
+        if hasattr(self.args, "no_write_file"):
+            self.logger.debug("Overwriting cleaning up old key files from args: %s", self.args.no_write_file)
+            self.config["no_write_file"] = self.args.no_write_file
+
+        if hasattr(self.args, "store_in_new_files"):
+            self.logger.debug("Overwriting store_in_new_files from args: %s", self.args.store_in_new_files)
+            self.config["store_in_new_files"] = self.args.store_in_new_files
+
+    def decide_arguments(self):
+        should_update_dns = self.config["update_dns"]
+
+        level = logging.WARN
+        if self.args.log_debug:
+            level = logging.DEBUG
+        elif self.args.log_info:
+            level = logging.INFO
+
+        if self.args.output_selector:
+            should_update_dns = False
+            level = logging.ERROR
+        self.logger.setLevel(level)
+        logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
+        if self.args.output_selector:
+            self.logger.debug("Disabling updating DNS because outputting a selector is enabled")
+
+        working_dir = self.args.working_dir
+        if "--working-dir" in sys.argv:
+            self.logger.debug("Setting working directory from argument")
+            self.logger.info("Changing working directory to %s", working_dir)
+            os.chdir(working_dir)
+
+
+        selector = self.args.selector
+        if selector is None:
+            selector = self.generate_selector()
+        else:
+            self.logger.info("Selector: %s", selector)
+            if self.args.output_selector:
+
+                sys.exit(0)
+
+        return should_update_dns, selector
+
+    def read_files(self):
+        self.logger.debug("Reading files")
+        self.read_dns_api()
+        self.load_dns_api_module_extra_data()
+
+        if not self.read_domain_data():
+            sys.exit(1)
+
+    def main(self):
+
+        self.parse_args()
+
+        self.read_config(self.args.config)
+
+        should_update_dns, selector = self.decide_arguments()
+
+        self.overwrite_from_args()
+
+        self.read_files()
+        self.key_names = self.get_key_names()
+
+        self.key_data = self.generate_keys(selector)
+
+        key_table_contents = self.read_key_table()
+
+        if not key_table_contents:
+            key_table_contents = {}
+        # Check for our DNS API modules. If we don"t have any, there"s no sense in
+        # trying to do automatic updating even if we"re supposed to.
+        self.dns_apis, should_update_dns_new = self.find_dns_api_modules()
+        should_update_dns = should_update_dns and should_update_dns_new
+
+        self.initialize_dns_api_modules()
+        failed_domains = self.update_dns(should_update_dns)
+
+        self.finish_dns_api_modules()
+        if not self.config["no_write_file"] and self.key_table_length == len(key_table_contents):
+            self.logger.info("Generating key and signing tables")
+            self.write_tables(key_table_contents, selector, failed_domains)
+        else:
+            self.logger.info("Not writing key or signing tables")
+
+        self.save_dns_api_module_extra_data()
+
+        sys.exit(0)
+
+if __name__ == "__main__":
+    GENKEYS = Genkeys()
+    GENKEYS.main()
