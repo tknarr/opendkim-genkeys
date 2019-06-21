@@ -39,7 +39,7 @@ import logging
 import requests
 
 
-def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
+def add( dnsapi_data, dnsapi_domain_data, key_data, module_specific_data, debugging = False ):
     if len( dnsapi_data ) < 1:
         logging.error( "DNS API linode: API key not configured" )
         return False,
@@ -89,7 +89,7 @@ def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     return result
 
 
-def delete( dnsapi_data, dnsapi_domain_data, record_data, debugging = False ):
+def delete( dnsapi_data, dnsapi_domain_data, record_data, module_specific_data, debugging = False ):
     if len(dnsapi_data) < 1:
         logging.error("DNS API linode: API key not configured")
         return False

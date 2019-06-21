@@ -23,7 +23,7 @@ import datetime
 import logging
 
 
-def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
+def add( dnsapi_data, dnsapi_domain_data, key_data, module_specific_data, debugging = False ):
     if debugging:
         try:
             logging.debug( "    DNS API %s", key_data['dnsapi'] )
@@ -39,6 +39,6 @@ def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     return True, key_data['domain'], key_data['selector'], datetime.datetime.utcnow(), '-'
 
 
-def delete( dnsapi_data, dnsapi_domain_data, record_data, debugging = False ):
+def delete( dnsapi_data, dnsapi_domain_data, record_data, module_specific_data, debugging = False ):
     # Nothing to do for this API
     return True

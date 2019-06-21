@@ -44,7 +44,7 @@ import requests
 from requests_aws4auth import AWS4Auth
 
 
-def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
+def add( dnsapi_data, dnsapi_domain_data, key_data, module_specific_data, debugging = False ):
     if len( dnsapi_data ) < 2:
         logging.error( "DNS API route53: AWS key not configured" )
         return False,
@@ -103,7 +103,7 @@ def add( dnsapi_data, dnsapi_domain_data, key_data, debugging = False ):
     return result
 
 
-def delete(dnsapi_data, dnsapi_domain_data, record_data, debugging = False):
+def delete(dnsapi_data, dnsapi_domain_data, record_data, module_specific_data, debugging = False):
     if len(dnsapi_data) < 2:
         logging.error("DNS API route53: AWS key not configured")
         return False
