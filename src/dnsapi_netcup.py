@@ -83,7 +83,13 @@ def delete(dnsapi_data, dnsapi_domain_data, record_data, module_specific_data, d
     domain = record_data[0]
     selector = record_data[1]
     # try logging in
-    api = Client(customer_id, api_key, api_pw)
+    api = None
+    if isinstance(module_specific_data, dict) and module_specific_data.get("api_session"):
+        api = module_specific_data["api_session"]
+    else:
+        api = Client(customer_id, api_key, api_pw)
+    if isinstance(module_specific_data, dict):
+        module_specific_data["api_session"] = api
     ret = None
     if api:
         try:
