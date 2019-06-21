@@ -188,6 +188,17 @@ class Genkeys():
                 key_names.append(key_name)
         return key_names
 
+    @classmethod
+    def make_dkim_record_name(cls, selector: str, domain:str):
+        """
+        Generate the DNS record name for the selector and domain
+        """
+        return "%s._domainkey.%s" % (selector, domain)
+
+    @classmethod
+    def make_dkim_record_content(cls, public_key: str, version="DKIM1"):
+        return [ ("v", version), ("h", "sha256"), ("k", "rsa"), ("s", "email"), ("p", public_key) ]
+
     def generate_keys(self, selector: str):
         """ Generate all keys """
         generated_key_data = {}
@@ -246,14 +257,52 @@ class Genkeys():
             "chunked" : public_key_chunked
         }
 
-    def test_dns_servers(self, records, servers):
-        """ check if the records can be resolved on all given servers """
-        pass
+    def test_dns_servers(self, dns_record_name: str, dns_record_content: str, domain: str, domain_key: str):
+        """Check if the given record name has the given content for the domain's configured DNS servers """
+        ret = True
+        servers = self.domain_data[domain].get("dns_servers")
+        if servers:
+            for server in servers:
+                ret &= self.test_single_dns_server(dns_record_name, dns_record_content, server)
+        return ret
 
-    def test_single_dns_server(self, record, server):
+    def test_single_dns_server(self, dns_record_name, dns_record_content, server):
         """ check if the given record can be resolved on the given server """
-        pass
+        try:
+            proc = subprocess.run(
+                ["dig", "+short", "TXT", dns_record_name, "@%s" % server],
+                stdout=subprocess.PIPE)
+            stdout = proc.stdout.decode("utf-8")
+            self.logger.debug("Received from dig via stdout: %s", stdout)
+            if not proc.returncode:
+                logging.debug("Received from %s TXT value %s", server, stdout)
+                # basically join split strings
+                stdout = stdout.replace("\" \"", "")
+                stdout = stdout.replace(";", "")
+                stdout = stdout.replace("\"", "")
+                print(stdout)
+                parameters = stdout.split(" ")
+                print(parameters)
+                last = None
+                pairs = []
+                i = 0
+                for token in parameters:
+                    t1, t2 = token.split("=")
+                    pairs.append((t1.replace("\n", ""), t2.replace("\n", "")))
 
+                # sort provided and parsed lists
+                pairs.sort(key=lambda x: x[0], reverse=False)
+                dns_record_content.sort(key=lambda x: x[0], reverse=False)
+                for key_val_1, key_val_2 in zip(pairs, dns_record_content):
+                    if key_val_1[0] != key_val_2[0] or key_val_1[1] != key_val_2[1]:
+                        logging.error("Answer and provided content differ: %s != %s", key_val_1, key_val_2)
+                        return False
+                return True
+            else:
+                return False
+        except Exception as exception:
+            logging.error("An exception occured: %s", exception)
+            return False
 
     def generate_selector(self):
         """Generate the selector for this month based upon the date"""
@@ -390,7 +439,7 @@ class Genkeys():
             self.logger.error("Failed to write to %s due to general exception %s", file, exception)
 
     def update_domain(self, domain: str, failed_domains: list, update_data: list,
-        should_update_dns: bool):
+                      should_update_dns: bool):
         """
         Update the specified domain, cleanup outdated files
         """
@@ -425,13 +474,23 @@ class Genkeys():
                                        domain_data, key_data, dns_api_module, 70)
 
                 if should_update_dns:
+                    dns_record_name = self.make_dkim_record_name(key_data["selector"], domain)
+                    dns_record_content = self.make_dkim_record_content(key_data["plain"])
                     # Add new record
                     self.logger.info("Updating selector %s for %s with key %s",
                                      key_data["selector"], domain, domain_data["key"])
                     result = dns_api_module.add(dns_api_data, dns_api_parameters, key_data,
                                                 self.dns_api_extra[dns_api_name],
                                                 self.args.log_debug)
-                    if result[0]:
+                    record_available = self.test_dns_servers(
+                        dns_record_name, dns_record_content, domain, domain_data["key"])
+
+                    if not record_available:
+                        logging.warning(
+                            "Record %s is not available on its configured DNS servers. Skipping update.",
+                            dns_record_name
+                            )
+                    if result[0] and record_available:
                         self.logger.info("Update succeeded.")
                         # remove old record
                         # only add if key is new
