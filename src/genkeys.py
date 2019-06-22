@@ -181,11 +181,17 @@ class Genkeys():
     def get_key_names(self):
         """ Get all key names from the key file """
         key_names = []
-        for domain_data in self.domain_data.values():
+        for domain, domain_data in self.domain_data.items():
             key_name = domain_data.get("key")
-            if key_name is not None and key_name not in key_names:
+            if key_name and key_name not in key_names:
                 key_names.append(key_name)
+            else:
+                key_names.append(self.make_key_name(domain))
         return key_names
+
+    @classmethod
+    def make_key_name(cls, name):
+        return name.replace(".", "-")
 
     @classmethod
     def make_dkim_record_name(cls, selector: str, domain:str):
@@ -609,13 +615,12 @@ class Genkeys():
         # Now write the updated lines to the files
         for domain, domain_data in self.domain_data.items():
             if domain not in failed_domains:
-                code = domain.replace(".", "-")
                 self.logger.info("Adding entries for %s", domain)
                 try:
                     key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
-                                          (code, domain, selector, self.config["opendkim_dir"] + "/keys",
+                                          (domain_data["key"], domain, selector, self.config["opendkim_dir"] + "/keys",
                                            domain_data["key"], selector))
-                    signing_table_file.write("*@%s\t%s\n" % (domain, code))
+                    signing_table_file.write("*@%s\t%s\n" % (domain, domain_data["key"]))
                 except IOError as exception:
                     logging.critical("Error writing new key or signing table file")
                     self.logger.error("%s", str(exception))
