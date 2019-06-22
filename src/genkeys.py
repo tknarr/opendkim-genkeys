@@ -234,8 +234,7 @@ class Genkeys():
                     "openssl genrsa failed with returncode %s and the following error output: %s",
                     process.returncode, process.stderr)
                 return None
-            else:
-                new = True
+            new = True
         else:
             logging.warning("Files for key %s selector %s already exist", key, selector)
 
