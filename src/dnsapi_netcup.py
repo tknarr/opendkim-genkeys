@@ -30,7 +30,7 @@ import datetime
 import logging
 from nc_dnsapi import Client, DNSRecord
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__file__)
 
 def add(dnsapi_data, dnsapi_domain_data, key_data, module_specific_data, debugging=False):
     if debugging:
