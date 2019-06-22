@@ -536,7 +536,7 @@ class Genkeys():
             # Find all files that match the name pattern for one of our
             # domain name abbreviations
             for target in self.key_names:
-                target_list += glob.glob(target + ".*.key") + glob.glob(target + ".*.txt")
+                target_list += glob.glob(target + ".*.key")
             # Go through the update data and remove the entries from target_list that are
             # still referred to by an update_data item.
             for domain_update_data in update_data:
