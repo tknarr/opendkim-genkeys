@@ -557,7 +557,7 @@ class Genkeys():
                         item_str = domain_key["key"] + "." + domain_update_data["selector"] + suffix
                         try:
                             i = target_list.index(item_str)
-                        except:
+                        except ValueError:
                             i = -1
                         if i >= 0:
                             del target_list[i]
