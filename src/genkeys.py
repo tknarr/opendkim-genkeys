@@ -35,23 +35,6 @@ class Genkeys():
 
     def __init__(self):
         self.args = None
-        self.config = None
-        self.dns_api_data = {}
-        self.domain_data = None
-        self.logger = logging.getLogger(__file__)
-        self.key_table_length = 0
-        self.signing_table_length = 0
-        self.dns_apis = {
-            "null" : []
-        }
-        self.key_names = None
-        self.key_data = None
-        self.dns_api_extra = {}
-
-    def read_config(self, config_path):
-        """Reads the configuration from the given configuration path and sets the default
-        configuration"""
-        # Directory that OpenDKIM key files will be placed in on the mail server
         self.config = {
             "opendkim_dir" : "/etc/opendkim",
             "working_dir" : "",
@@ -68,6 +51,22 @@ class Genkeys():
             "store_in_new_files" : False,
             "no_write_file" : False
         }
+        self.dns_api_data = {}
+        self.domain_data = None
+        self.logger = logging.getLogger(__file__)
+        self.key_table_length = 0
+        self.signing_table_length = 0
+        self.dns_apis = {
+            "null" : []
+        }
+        self.key_names = None
+        self.key_data = None
+        self.dns_api_extra = {}
+
+    def read_config(self, config_path):
+        """Reads the configuration from the given configuration path and sets the default
+        configuration"""
+        # Directory that OpenDKIM key files will be placed in on the mail server
 
         try:
             self.config.update(yaml.safe_load(open(config_path, "r")))
