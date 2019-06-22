@@ -24,7 +24,6 @@ import importlib
 import logging
 import os
 import os.path
-import string
 import subprocess
 import sys
 import yaml
@@ -197,7 +196,7 @@ class Genkeys():
 
     @classmethod
     def make_dkim_record_content(cls, public_key: str, version="DKIM1"):
-        return [ ("v", version), ("h", "sha256"), ("k", "rsa"), ("s", "email"), ("p", public_key) ]
+        return [("v", version), ("h", "sha256"), ("k", "rsa"), ("s", "email"), ("p", public_key)]
 
     def generate_keys(self, selector: str):
         """ Generate all keys """
