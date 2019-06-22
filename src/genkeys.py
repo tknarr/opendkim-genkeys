@@ -190,10 +190,13 @@ class Genkeys():
 
     @classmethod
     def make_key_name(cls, name):
+        """
+        Generate the key name from the domain
+        """
         return name.replace(".", "-")
 
     @classmethod
-    def make_dkim_record_name(cls, selector: str, domain:str):
+    def make_dkim_record_name(cls, selector: str, domain: str):
         """
         Generate the DNS record name for the selector and domain
         """
@@ -201,6 +204,9 @@ class Genkeys():
 
     @classmethod
     def make_dkim_record_content(cls, public_key: str, version="DKIM1"):
+        """
+        Make the dkim record for the given pubkey and version in touple formatter
+        """
         return [("v", version), ("h", "sha256"), ("k", "rsa"), ("s", "email"), ("p", public_key)]
 
     def generate_keys(self, selector: str):
