@@ -256,7 +256,7 @@ class Genkeys():
             "chunked" : public_key_chunked
         }
 
-    def test_dns_servers(self, dns_record_name: str, dns_record_content: str, domain: str, domain_key: str):
+    def test_dns_servers(self, dns_record_name: str, dns_record_content: str, domain: str):
         """Check if the given record name has the given content for the domain's configured DNS servers """
         ret = True
         servers = self.domain_data[domain].get("dns_servers")
@@ -475,7 +475,7 @@ class Genkeys():
                                                 self.dns_api_extra[dns_api_name],
                                                 self.args.log_debug)
                     record_available = self.test_dns_servers(
-                        dns_record_name, dns_record_content, domain, domain_data["key"])
+                        dns_record_name, dns_record_content, domain)
                     if not record_available:
                         logging.warning(
                             "Record %s is not available on its configured DNS servers. Skipping update.",
