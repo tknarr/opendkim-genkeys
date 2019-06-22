@@ -641,7 +641,7 @@ class Genkeys():
                             help="Causes the generated selector to be output")
         parser.add_argument("--working-dir", dest="working_dir", action="store",
                             help="Set the working directory for DKIM data files",
-                            default="")
+                            default=argparse.SUPPRESS)
         parser.add_argument("--opendkimDir", dest="opendkim_dir", action="store",
                             help="The directory of the opendkim configuration",
                             default="/etc/opendkim")
@@ -693,6 +693,14 @@ class Genkeys():
         if hasattr(self.args, "store_in_new_files"):
             self.logger.debug("Overwriting store_in_new_files from args: %s", self.args.store_in_new_files)
             self.config["store_in_new_files"] = self.args.store_in_new_files
+        if hasattr(self.args, "working_dir"):
+            self.logger.debug("Setting working directory from argument: %s", self.args.working_dir)
+            os.chdir(self.args.working_dir)
+        else:
+            config_wd = self.config.get("working_dir")
+            if config_wd and config_wd != "":
+                self.logger.debug("Setting working directory from config: %s", config_wd)
+                os.chdir(config_wd)
 
     def decide_arguments(self):
         """
@@ -713,13 +721,6 @@ class Genkeys():
         logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
         if self.args.output_selector:
             self.logger.debug("Disabling updating DNS because outputting a selector is enabled")
-
-        working_dir = self.args.working_dir
-        if "--working-dir" in sys.argv:
-            self.logger.debug("Setting working directory from argument")
-            self.logger.info("Changing working directory to %s", working_dir)
-            os.chdir(working_dir)
-
 
         selector = self.args.selector
         if selector is None:
