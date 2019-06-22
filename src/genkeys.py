@@ -38,7 +38,7 @@ class Genkeys():
         self.config = None
         self.dns_api_data = {}
         self.domain_data = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger(__file__)
         self.key_table_length = 0
         self.signing_table_length = 0
         self.dns_apis = {
@@ -695,6 +695,9 @@ class Genkeys():
             self.config["store_in_new_files"] = self.args.store_in_new_files
 
     def decide_arguments(self):
+        """
+        Decide on values of internal configuration
+        """
         should_update_dns = self.config["update_dns"]
 
         level = logging.WARN
@@ -730,6 +733,9 @@ class Genkeys():
         return should_update_dns, selector
 
     def read_files(self):
+        """
+        Read dnsapi.yml, dnsapi_extra.yml and domains.yml files.
+        """
         self.logger.debug("Reading files")
         self.read_dns_api()
         self.load_dns_api_module_extra_data()
@@ -738,6 +744,9 @@ class Genkeys():
             sys.exit(1)
 
     def main(self):
+        """
+        main function
+        """
 
         self.parse_args()
 
