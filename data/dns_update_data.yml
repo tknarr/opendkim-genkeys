@@ -1,0 +1,5 @@
+- creation_time: YYYY-MM-DDThh:mm:ss
+  domain_name: example1.com
+  module_specific_information:
+  - xxxxxx
+  selector: '197604'
