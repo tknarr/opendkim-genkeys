@@ -168,6 +168,8 @@ the `--no-dns` option).
 ### `opendkim-genkeys.yml`
 
 This file contains the configuration of opendkim-genkeys in yaml format.
+Its default location is `/etc/opendkim-genkeys.yml`. This can also be seen in the help message of the script.
+
 The following keys exist:
 
 * `opendkim_dir`                  Default: "/etc/opendkim"
