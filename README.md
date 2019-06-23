@@ -165,6 +165,62 @@ DNS API name is present (and the information in `dnsapi.yml` and `domains.yml` i
 the script will use the API to add the new DKIM record automatically (you can suppress this via
 the `--no-dns` option).
 
+### `opendkim-genkeys.yml`
+
+This file contains the configuration of opendkim-genkeys in yaml format.
+The following keys exist:
+
+* `opendkim_dir`                  Default: "/etc/opendkim"
+                                  Description: Sets the directory in which the opendkim files are stored.
+                                  It is assumed that the key table and signing table files are stored in that directory.
+                                  It is also assumed that the directory "keys" below the opendkim directory contains all private keys.
+* `working_dir`                   Default: ""
+                                  Description: Sets the working directory into which opendkim-genkeys cd's into after parsing of the arguments
+* `update_dns`                    Default: True
+                                  Description: Whether to update any DNS records or not
+* `domain_file_name`              Default: "domains.yml"
+                                  Description: The file name in which the domains are stored for which keys should be generated
+* `dns_api_defs_filename`         Default: "dnsapi.yml"
+                                  Description: The file in which the DNS APIs are configured
+* `dns_api_extra_data_file_name`  Default: "dnsapi_extra.yml"
+                                  Description: DNS API modules can store data permanently in this file
+* `dns_update_data_file_name`     Default: "dns_update_data.yml"
+                                  Description: This file contains data describing the domain, selector and    creation date of any generated keys.
+* `key_table`                     Default: "key.table"
+                                  Description: The opendkim key table.
+* `signing_table`                 Default: "signing.table"
+                                  Description: The opendkim signing table.
+* `key_directory`                 Default: "/etc/opendkim/keys"
+                                  Description: The directory that contains any private keys
+* `cleanup_file`"                 Default: True
+                                  Description: Whether to remove outdated private keys.
+* `day_difference`                Default: 70
+                                  Description: The days that private keys stay around after they are not used anymore.
+* `store_in_new_files`            Default: False
+                                  Description: Whether to store the generated key and signing tables and the dns update data in files ending in the ".new" extension.
+* `no_write_file`                 Default: False
+                                  Description: Whether to write into any files at all
+* `new_key_owner`                 Default: "opendkim"
+                                  Description: The owner of any newly generated keys.
+* `new_key_group`                 Default: "root"
+                                  Description: The group of any newly generated keys.
+* `new_key_mode`                  Default: 0o400
+                                  Description: The Unix ACL (SRWX bits) for newly generated keys.
+* `key_table_owner`               Default: "root"
+                                  Description: The owner that the key.table file is supposed to have.
+* `key_table_group`               Default: "root",
+                                  Description: The group that the key.table file is supposed to have.
+* `key_table_mode`                Default: 0o400,
+                                  Description: The Unix ACL (SRWX bits) of the key.table file.
+* `signing_table_owner`           Default: "root"
+                                  Description: The owner that the signing.table file is supposed to have.
+
+* `signing_table_group`           Default: "root",
+                                  Description: The group that the signing.table file is supposed to have.
+
+* `signing_table_mode`            Default: 0o400
+                                  Description: The Unix ACL (SRWX bits) of the signing.table file.
+
 # Generated files
 
 ### `dns_update_data.yml`
