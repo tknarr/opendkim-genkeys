@@ -24,6 +24,7 @@ import importlib
 import logging
 import os
 import os.path
+import shutil
 import subprocess
 import sys
 import yaml
@@ -49,7 +50,16 @@ class Genkeys():
             "cleanup_files" : True,
             "day_difference" : 70,
             "store_in_new_files" : False,
-            "no_write_file" : False
+            "no_write_file" : False,
+            "new_key_owner" : "opendkim",
+            "new_key_group" : "root",
+            "new_key_mode" : 0o400,
+            "key_table_owner" : "root",
+            "key_table_group" : "root",
+            "key_table_mode" : 0o400,
+            "signing_table_owner" : "root",
+            "signing_table_group" : "root",
+            "signing_table_mode" : 0o400
         }
         self.dns_api_data = {}
         self.domain_data = None
@@ -240,6 +250,13 @@ class Genkeys():
                     "openssl genrsa failed with returncode %s and the following error output: %s",
                     process.returncode, process.stderr)
                 return None
+            # chown and chmod
+            shutil.chown(
+                private_key_file_name,
+                user=self.config.get("new_key_owner"),
+                group=self.config.get("new_key_group"))
+
+            os.chmod(private_key_file_name, self.config["new_key_mode"])
             new = True
         else:
             logging.warning("Files for key %s selector %s already exist", key, selector)
@@ -587,6 +604,7 @@ class Genkeys():
         Write the domain data and key domain table into key.table and signing.table in the
         format opendkim expects
         """
+
         key_table_file_name = "key.table"
         signing_table_file = "signing.table"
 
@@ -631,10 +649,24 @@ class Genkeys():
                     return False
         key_table_file.close()
         signing_table_file.close()
+        # change owner and group
+        shutil.chown(
+            self.config["key_table_file_name"],
+            user=self.config.get("key_table_owner"),
+            group=self.config.get("key_table_group"))
+        shutil.chown(
+            self.config["signing_table_file_name"],
+            user=self.config.get("signing_table_owner"),
+            group=self.config.get("signing_table_group"))
+
+        os.chmod(self.config["key_table_file_name"], self.config["key_table_mode"])
+        os.chmod(self.config["signing_table_file_name"], self.config["signing_table_mode"])
         return True
 
     def parse_args(self):
-        # Set up command-line argument parser and parse arguments
+        """
+        Set up command-line argument parser and parse arguments
+        """
         parser = argparse.ArgumentParser(description="Generate OpenDKIM key data for a set of"
                                          " domains")
         parser.add_argument("-v", "--verbose", dest="log_info", action="store_true",
@@ -682,6 +714,9 @@ class Genkeys():
             sys.exit(0)
 
     def overwrite_from_args(self):
+        """
+        Handle overwriting config file values from passed arguments
+        """
         if hasattr(self.args, "no_update_dns"):
             self.logger.debug("Overwriting updating to dns from args: %s", self.args.update_dns)
             self.config["should_update_dns"] = self.args.no_update_dns
