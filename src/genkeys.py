@@ -557,8 +557,9 @@ class Genkeys():
         for domain in self.domain_data.keys():
             self.update_domain(domain, failed_domains, update_data, should_update_dns)
 
+        self.write_file(self.config["dns_update_data_file_name"], update_data)
+
         if self.config["cleanup_files"]:
-            self.write_file(self.config["dns_update_data_file_name"], update_data)
             target_list = []
             # Find all files that match the name pattern for one of our
             # domain name abbreviations
@@ -640,7 +641,7 @@ class Genkeys():
                 self.logger.info("Adding entries for %s", domain)
                 try:
                     key_table_file.write("%s\t%s:%s:%s/%s.%s.key\n" % \
-                                          (domain_data["key"], domain, selector, self.config["opendkim_dir"] + "/keys",
+                                          (domain_data["key"], domain, selector, self.config["key_directory"],
                                            domain_data["key"], selector))
                     signing_table_file.write("*@%s\t%s\n" % (domain, domain_data["key"]))
                 except IOError as exception:
