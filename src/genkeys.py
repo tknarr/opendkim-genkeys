@@ -301,7 +301,7 @@ class Genkeys():
             stdout = proc.stdout.decode("utf-8")
             self.logger.debug("Received from dig via stdout: %s", stdout)
             if not proc.returncode:
-                logging.debug("Received from %s TXT value %s", server, stdout)
+                self.logger.debug("Received from %s TXT value %s", server, stdout)
                 # basically join split strings
                 stdout = stdout.replace("\" \"", "").replace(";", "").replace("\"", "")
                 parameters = stdout.split(" ")
@@ -315,13 +315,13 @@ class Genkeys():
                 dns_record_content.sort(key=lambda x: x[0], reverse=False)
                 for key_val_1, key_val_2 in zip(pairs, dns_record_content):
                     if key_val_1[0] != key_val_2[0] or key_val_1[1] != key_val_2[1]:
-                        logging.error("Answer and provided content differ: %s != %s",
+                        self.logger.error("Answer and provided content differ: %s != %s",
                                       key_val_1, key_val_2)
                         return False
                 return True
             return False
         except Exception as exception:
-            logging.error("An exception occured: %s", exception)
+            self.logger.error("An exception occured: %s", exception)
             return False
 
     def generate_selector(self):
@@ -358,7 +358,7 @@ class Genkeys():
                 self.logger.debug("DNS API module %s loaded", api_name)
                 dns_apis[api_name] = module
         if not dns_apis:
-            logging.warning("No DNS API modules found at %s", os.path.dirname(__file__))
+            self.logger.warning("No DNS API modules found at %s", os.path.dirname(__file__))
             should_update_dns = False
 
         return dns_apis, should_update_dns
@@ -381,8 +381,8 @@ class Genkeys():
 
         except Exception as exception:
             if not self.config["update_dns"]:
-                logging.warning("Failed to load dns API extra data!")
-                logging.warning("Exception: %s", exception)
+                self.logger.warning("Failed to load dns API extra data!")
+                self.logger.warning("Exception: %s", exception)
         return True
 
     def save_dns_api_module_extra_data(self):
@@ -504,7 +504,7 @@ class Genkeys():
                     record_available = self.test_dns_servers(
                         dns_record_name, dns_record_content, domain)
                     if not record_available:
-                        logging.warning(
+                        self.logger.warning(
                             "Record %s is not available on its configured DNS servers. Skipping update.",
                             dns_record_name)
                         failed_domains.append(domain)
@@ -606,16 +606,18 @@ class Genkeys():
         format opendkim expects
         """
 
+        key_table_file = None
         key_table_file_name = "key.table"
-        signing_table_file = "signing.table"
+        signing_table_file = None
+        signing_table_file_name = "signing.table"
 
         if self.config["store_in_new_files"]:
             key_table_file_name += ".new"
-            signing_table_file += ".new"
+            signing_table_file_name += ".new"
 
         try:
             key_table_file = open(key_table_file_name, "w")
-            signing_table_file = open(signing_table_file, "w")
+            signing_table_file = open(signing_table_file_name, "w")
         except IOError as exception:
             logging.critical("Error creating new key or signing table file")
             self.logger.error("%s", str(exception))
@@ -652,16 +654,16 @@ class Genkeys():
         signing_table_file.close()
         # change owner and group
         shutil.chown(
-            self.config["key_table_file_name"],
+            key_table_file_name,
             user=self.config.get("key_table_owner"),
             group=self.config.get("key_table_group"))
         shutil.chown(
-            self.config["signing_table_file_name"],
+            signing_table_file_name,
             user=self.config.get("signing_table_owner"),
             group=self.config.get("signing_table_group"))
 
-        os.chmod(self.config["key_table_file_name"], self.config["key_table_mode"])
-        os.chmod(self.config["signing_table_file_name"], self.config["signing_table_mode"])
+        os.chmod(key_table_file_name, self.config["key_table_mode"])
+        os.chmod(signing_table_file_name, self.config["signing_table_mode"])
         return True
 
     def parse_args(self):
