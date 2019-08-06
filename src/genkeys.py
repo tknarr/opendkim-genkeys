@@ -21,6 +21,7 @@ import argparse
 import datetime
 import glob
 import importlib
+import importlib.util
 import logging
 import os
 import os.path
@@ -47,6 +48,7 @@ class Genkeys():
             "key_table" : "key.table",
             "signing_table" : "signing.table",
             "key_directory" : "/etc/opendkim/keys",
+            "dnsapi_directory" : os.path.dirname(__file__),
             "cleanup_files" : True,
             "day_difference" : 70,
             "store_in_new_files" : False,
@@ -338,7 +340,7 @@ class Genkeys():
         return selector_date.strftime("%Y%m")
 
     def find_dns_api_modules(self):
-        """Find all available DNS API modules (they're in the src directory"""
+        """Find all available DNS API modules (they're in the src directory)"""
         # Go through all possible names (pulled from what"s mentioned in the
         # dnsapi.yml file) and for each one X see if we can load a module named
         # dnsapi_X (file will be dnsapi_X.py).
@@ -349,7 +351,11 @@ class Genkeys():
         for api_name in possible_names:
             module_name = "dnsapi_" + api_name
             try:
-                module = importlib.import_module(module_name)
+                spec = importlib.util.spec_from_file_location(
+                    module_name, "%s/%s.py" % (self.config["dnsapi_directory"], module_name))
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                sys.modules[module_name] = module
             except ImportError as exception:
                 module = None
                 self.logger.error("Module %s for DNS API %s not found", module_name, api_name)
@@ -358,7 +364,7 @@ class Genkeys():
                 self.logger.debug("DNS API module %s loaded", api_name)
                 dns_apis[api_name] = module
         if not dns_apis:
-            self.logger.warning("No DNS API modules found at %s", os.path.dirname(__file__))
+            self.logger.warning("No DNS API modules found at %s", self.config["dnsapi_directory"])
             should_update_dns = False
 
         return dns_apis, should_update_dns
@@ -687,6 +693,9 @@ class Genkeys():
         parser.add_argument("--key-directory", dest="key_directory", action="store",
                             help="The directory of the opendkim keys directory",
                             default="/etc/opendkim/keys")
+        parser.add_argument("--dnsapi-directory", dest="dnsapi_directory", action="store",
+                            help="The directory in which the dnsapi modules are stored",
+                            default=os.path.dirname(__file__))
         parser.add_argument("--config", action="store",
                             help="The path to the configuration file",
                             default="/etc/opendkim-genkeys.yml")
@@ -712,6 +721,7 @@ class Genkeys():
         parser.add_argument("domains", nargs=argparse.REMAINDER, help="List of domains to process")
 
         self.args = parser.parse_args()
+
         if self.args.display_version:
             print("OpenDKIM genkeys %s" % self.VERSION)
             sys.exit(0)
@@ -743,6 +753,7 @@ class Genkeys():
             if config_wd and config_wd != "":
                 self.logger.debug("Setting working directory from config: %s", config_wd)
                 os.chdir(config_wd)
+        self.config["dnsapi_directory"] = self.args.dnsapi_directory
 
     def decide_arguments(self):
         """
