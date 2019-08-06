@@ -1,0 +1,9 @@
+[Unit]
+Description=Timer for opendkim-genkeys
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+
+[Install]
+WantedBy=multi-user.target
