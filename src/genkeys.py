@@ -681,7 +681,7 @@ class Genkeys():
         parser.add_argument("--working-dir", dest="working_dir", action="store",
                             help="Set the working directory for DKIM data files",
                             default=argparse.SUPPRESS)
-        parser.add_argument("--opendkimDir", dest="opendkim_dir", action="store",
+        parser.add_argument("--opendkim-dir", dest="opendkim_dir", action="store",
                             help="The directory of the opendkim configuration",
                             default="/etc/opendkim")
         parser.add_argument("--key-directory", dest="key_directory", action="store",
