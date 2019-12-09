@@ -151,22 +151,65 @@ o2Wp4EN0+2u1qFUGsfTlefLixjY8KpHKetPDtXK5xYiMPPDRDImP
     for item in key_names:
         assert item in found
 
-def write_Tables(tempdir):
-    test_key_domain_table = []
-    test_selector = None
+def test_write_tables(tmpdir):
     failed_domains = []
     store_in_new_files = False
-    key_directory = tempdir
-
+    key_directory = tmpdir
+    known_good_key_table_content = """\
+test_1\texample_1.com:2000-01-01:%s/test_1.2000-01-01.key
+test_2\texample_2.com:2000-01-01:%s/test_2.2000-01-01.key
+""" % (tmpdir, tmpdir)
+    known_good_signing_table_content = """\
+*@example_1.com\ttest_1
+*@example_2.com\ttest_2
+"""
     genkeys_module = genkeys.Genkeys()
-    assert genkeys_module.write_Tables(
+    genkeys_module.domain_data = {
+        "example_1.com" : {
+            "key" : "test_1"
+        },
+        "example_2.com" : {
+            "key" : "test_2"
+        }
+    }
+    genkeys_module.config.update(
+        {
+            "key_table_owner" : os.getuid(),
+            "key_table_group" : os.getgid(),
+            "signing_table_owner" : os.getuid(),
+            "signing_table_group" : os.getgid()
+        })
+    selector = "2000-01-01"
+    key_table_name = "key.table"
+    signing_table_name = "signing.table"
+    test_key_domain_table = {
+        1 : {
+            "domain" : "example_1.com",
+            "key_name" : "test_1",
+            "selector" : selector,
+            "path_to_keyfile" : "test_123.key"
+        },
+        2 : {
+            "domain" : "example_2.com",
+            "key_name" : "test_2",
+            "selector" : selector,
+            "path_to_keyfile" : "test_456.key"
+        }
+    }
+    os.chdir(tmpdir)
+    assert genkeys_module.write_tables(
         test_key_domain_table,
-        test_selector,
+        selector,
         failed_domains,
         store_in_new_files,
         key_directory)
+    assert os.path.exists("key.table")
+    assert os.path.exists("signing.table")
+    key_table_content = open(key_table_name, "r", encoding="utf-8").read()
+    signing_table_content = open(signing_table_name, "r", encoding="utf-8").read()
+    assert key_table_content == known_good_key_table_content
+    assert signing_table_content == known_good_signing_table_content
 
-    pass
 def test_generate_singular_key():
     pass
 
