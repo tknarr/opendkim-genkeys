@@ -257,11 +257,12 @@ class Genkeys():
         new = False
         private_key_file_name = "{}/{}".format(
             key_directory,
-            self.generate_key_file_name(key,
-            selector))
+            self.generate_key_file_name(
+                key,
+                selector))
         if not os.path.exists(private_key_file_name):
             self.logger.info("File %s for selector %s (key %s) does not exist yet, generating it.",
-                             private_key_file_name, key, selector)
+                             private_key_file_name, selector, key)
             # file does not exist
             process = subprocess.run(["openssl", "genrsa", "-out", private_key_file_name, "--",
                                       str(key_length)], stdout=subprocess.PIPE,
@@ -450,8 +451,13 @@ class Genkeys():
                 ret.append((index, candidate))
         return ret
 
-    def cleanup_files(self, update_data: list, dns_domain_data: dict, key_data: dict,
-        dns_api_module_name: str, day_difference: int):
+    def cleanup_files(
+            self,
+            update_data: list,
+            dns_domain_data: dict,
+            key_data: dict,
+            dns_api_module_name: str,
+            day_difference: int):
         """ Remove old records from config files and remove old records from DNS"""
         removed_count = 0
         to_remove = []
@@ -848,12 +854,12 @@ class Genkeys():
         return should_update_dns, selector
 
     def read_files(
-        self,
-        dns_api_data,
-        dns_api_extra_data_file_name,
-        dns_api_defs_filename,
-        update_dns,
-        domain_file_name):
+            self,
+            dns_api_data,
+            dns_api_extra_data_file_name,
+            dns_api_defs_filename,
+            update_dns,
+            domain_file_name):
         """
         Read dnsapi.yml, dnsapi_extra.yml and domains.yml files.
         """
@@ -881,7 +887,7 @@ class Genkeys():
             self.dns_api_data,
             self.config["dns_api_extra_data_file_name"],
             self.config["dns_api_defs_filename"],
-            self.config["update_dns"]
+            self.config["update_dns"],
             self.config["domain_file_name"]
             )
         self.key_names = self.get_key_names()
@@ -906,12 +912,18 @@ class Genkeys():
         failed_domains = self.update_dns(
             should_update_dns,
             self.config["dns_update_data_file_name"],
-            self.config["store_in_new_files"])
+            self.config["store_in_new_files"],
+            self.config["cleanup_files"])
 
         self.finish_dns_api_modules()
         if not self.config["no_write_file"] and self.key_table_length == len(key_table_contents):
             self.logger.info("Generating key and signing tables")
-            self.write_tables(key_table_contents, selector, failed_domains, self.config["store_in_new_files"])
+            self.write_tables(
+                key_table_contents,
+                selector,
+                failed_domains,
+                self.config["store_in_new_files"],
+                self.config["key_directory"])
         else:
             self.logger.info("Not writing key or signing tables")
 
