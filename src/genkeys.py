@@ -328,7 +328,9 @@ class Genkeys():
                 # split by lines
                 lines = stdout.splitlines()
                 if len(lines) > 1:
-                    self.logger.warning("There are %s records for the key. There must only be one!", len(lines))
+                    self.logger.warning(
+                        "There are %s records for the key. There must only be one!",
+                        len(lines))
                     return False
                 for line in lines:
                     self.logger.debug(line)

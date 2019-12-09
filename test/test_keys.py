@@ -7,14 +7,6 @@ sys.path.append("../src")
 
 import genkeys
 
-# Test key generation
-def test_key_generation():
-    # generate keys
-    # check file names
-    genkeys_module = genkeys.Genkeys()
-
-    pass
-
 def test_get_unknown_keys():
     pass
 
@@ -222,8 +214,44 @@ def test_test_single_dns_server():
 def test_generate_selector():
     pass
 
-def test_find_api_modules():
-    pass
+def test_find_dns_api_modules(tmpdir):
+    src_path = "%s/../src" % os.path.dirname(__file__)
+    print(__file__)
+    genkeys_module = genkeys.Genkeys()
+    genkeys_module.config.update({"opendkim_dir" : src_path, "dnsapi_directory" : src_path})
+    genkeys_module.dns_api_data = {
+        "null": [],
+        "freedns" : [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ],
+        "linode" : [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ],
+        "route53" :[
+            "xxxxxxxxxxxxxxxxxxxx",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ],
+        "cloudflare" : [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "user@domain.com"
+        ],
+        "cloudflareapi" : [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "user@domain.com"
+        ]
+    }
+    to_find = ["null", "freedns", "linode", "route53", "cloudflare", "cloudeflareapi"]
+    print(src_path)
+    os.chdir(tmpdir)
+    print(os.listdir(src_path))
+    modules, should_update_dns = genkeys_module.find_dns_api_modules()
+    print(modules)
+    assert should_update_dns
+    found = []
+    for module in modules:
+        assert module in to_find
+        found.append(module)
+    assert to_find.sort() == found.sort()
 
 def test_load_dns_api_module_extra_data():
     pass
