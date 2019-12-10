@@ -96,7 +96,7 @@ o2Wp4EN0+2u1qFUGsfTlefLixjY8KpHKetPDtXK5xYiMPPDRDImP
         "test_2"
     ]
     # write private keys
-    os.chdir(tmpdir)
+    os.chdir(str(tmpdir))
 
     for key_name, key_data in test_keys.items():
         key_names.append(key_name)
@@ -153,7 +153,7 @@ def test_write_tables(tmpdir):
     known_good_key_table_content = """\
 test_1\texample_1.com:2000-01-01:%s/test_1.2000-01-01.key
 test_2\texample_2.com:2000-01-01:%s/test_2.2000-01-01.key
-""" % (key_directory, key_director)
+""" % (key_directory, key_directory)
     known_good_signing_table_content = """\
 *@example_1.com\ttest_1
 *@example_2.com\ttest_2
