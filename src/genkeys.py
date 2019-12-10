@@ -264,7 +264,7 @@ class Genkeys():
             self.logger.info("File %s for selector %s (key %s) does not exist yet, generating it.",
                              private_key_file_name, selector, key)
             # file does not exist
-            process = subprocess.run(["openssl", "genrsa", "-out", private_key_file_name, "--",
+            process = subprocess.run(["openssl", "genrsa", "-out", private_key_file_name,
                                       str(key_length)], stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE)
             if process.returncode:
