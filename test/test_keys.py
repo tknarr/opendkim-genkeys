@@ -3,7 +3,7 @@ import pytest
 import subprocess
 import sys
 
-sys.path.append("../src")
+sys.path.append("%s/../src" % os.path.dirname(__file__))
 
 import genkeys
 
