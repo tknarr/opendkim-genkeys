@@ -86,7 +86,7 @@ o2Wp4EN0+2u1qFUGsfTlefLixjY8KpHKetPDtXK5xYiMPPDRDImP
             "A3D0r7l8grMkd8k/Zf0 v3qTMJYIEom1OzDWaTB7zoLKof3UIP"\
             "skXLspTmTpIEY3+9507BjMBpBO08gWgnfF 97M4F0mseyUkCJm"\
             "ZZMyVKnPAHAkYX90aoANPXUYJ8qoBPjT3I5yT92yEwtKIQn4N xwIDAQAB",
-            "filename" : "%s/test_1.%s.key" % (tmpdir, selector)
+            "filename" : "%s/test_1.%s.key" % (str(tmpdir), selector)
         }
     }
 
@@ -106,7 +106,7 @@ o2Wp4EN0+2u1qFUGsfTlefLixjY8KpHKetPDtXK5xYiMPPDRDImP
 
     genkeys_module.config["new_key_owner"] = os.getuid()
     genkeys_module.config["new_key_group"] = os.getgid()
-    generated_key_data = genkeys_module.generate_keys(selector, tmpdir, key_names)
+    generated_key_data = genkeys_module.generate_keys(selector, str(tmpdir), key_names)
     # check if all generated files exist and if they are valid keys
     if not generated_key_data:
         print("Failed to generate keys.", file=sys.stderr)
@@ -149,11 +149,11 @@ o2Wp4EN0+2u1qFUGsfTlefLixjY8KpHKetPDtXK5xYiMPPDRDImP
 def test_write_tables(tmpdir):
     failed_domains = []
     store_in_new_files = False
-    key_directory = tmpdir
+    key_directory = str(tmpdir)
     known_good_key_table_content = """\
 test_1\texample_1.com:2000-01-01:%s/test_1.2000-01-01.key
 test_2\texample_2.com:2000-01-01:%s/test_2.2000-01-01.key
-""" % (tmpdir, tmpdir)
+""" % (key_directory, key_director)
     known_good_signing_table_content = """\
 *@example_1.com\ttest_1
 *@example_2.com\ttest_2
@@ -191,7 +191,7 @@ test_2\texample_2.com:2000-01-01:%s/test_2.2000-01-01.key
             "path_to_keyfile" : "test_456.key"
         }
     }
-    os.chdir(tmpdir)
+    os.chdir(key_directory)
     assert genkeys_module.write_tables(
         test_key_domain_table,
         selector,
@@ -245,7 +245,7 @@ def test_find_dns_api_modules(tmpdir):
     }
     to_find = ["null", "freedns", "linode", "route53", "cloudflare", "cloudeflareapi"]
     print(src_path)
-    os.chdir(tmpdir)
+    os.chdir(str(tmpdir))
     print(os.listdir(src_path))
     modules, should_update_dns = genkeys_module.find_dns_api_modules()
     print(modules)
