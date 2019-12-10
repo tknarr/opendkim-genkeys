@@ -1,8 +1,10 @@
 # OpenDKIM genkeys tool
 
-[![Latest GitHub release](https://img.shields.io/github/release/tknarr/opendkim-genkeys.png)](https://github.com/tknarr/opendkim-genkeys/releases/latest)
+[![Latest GitHub release](https://img.shields.io/github/release/tknarr/opendkim-genkeys.png)](https://github.com/thermi/opendkim-genkeys/releases/latest)
+[![Build Status](https://travis-ci.com/Thermi/opendkim-genkeys.svg?branch=master)](https://travis-ci.com/Thermi/opendkim-genkeys)
 
 Copyright &copy; 2016 Todd T Knarr &lt;<tknarr@silverglass.org>&gt;
+
 Copyright &copy; 2019 Noel Kuntze &lt;<noel.kuntze+github@thermi.consulting>&gt;
 
 This program is free software: you can redistribute it and/or modify it under
