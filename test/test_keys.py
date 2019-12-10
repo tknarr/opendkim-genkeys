@@ -108,6 +108,9 @@ o2Wp4EN0+2u1qFUGsfTlefLixjY8KpHKetPDtXK5xYiMPPDRDImP
     genkeys_module.config["new_key_group"] = os.getgid()
     generated_key_data = genkeys_module.generate_keys(selector, tmpdir, key_names)
     # check if all generated files exist and if they are valid keys
+    if not:
+        genkeys_module.error("Failed to generate keys.")
+        sys.exit(1)
 
     found = []
     for key_name, key_data in generated_key_data.items():
