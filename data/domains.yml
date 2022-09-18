@@ -1,0 +1,31 @@
+example.com
+  key: example
+example1.com
+  key: example1
+  api: freedns
+  parameters:
+  - xxxxx
+example2.com
+  key: example2
+  api: linod
+  parameters:
+  - xxxxx
+example3.com
+  key: example3
+  api: rout53
+  parameters:
+  - us-east-1
+  - xxxxxxxxxxxxxx
+  - 3600
+example4.com
+  key: example4
+  api: cloudflare
+  parameters:
+  - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  - 1
+example5.com
+  key: example5
+  api: cloudflareapi
+  parameters:
+  - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  - 1

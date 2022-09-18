@@ -1,0 +1,14 @@
+'null': []
+freedns:
+- xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+linode:
+- xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+route53:
+- xxxxxxxxxxxxxxxxxxxx
+- xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+cloudflare:
+- xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+- user@domain.com
+cloudflareapi:
+- xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+- user@domain.com

@@ -1,0 +1,9 @@
+[Unit]
+Description=Unit for starting opendkim-genkeys
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/genkeys.py --opendkim-dir $OPENDKIM_DIR --working-dir $WORKING_DIR
+EnvironmentFile=/etc/conf.d/opendkim-genkeys.conf
+#User=opendkim
+Group=opendkim

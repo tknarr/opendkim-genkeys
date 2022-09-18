@@ -10,6 +10,26 @@ Copyright &copy; 2016 Todd T Knarr &lt;tknarr@silverglass.org&gt;
 
 ## Function details
 
+### `init`
+
+This function gets executed before any module API add or delete calls are done.
+It can be used to manipulate the `module_specific_data` structure.
+
+**Arguments**
+
+-   `module_specific_data`: An dict in which arbitrary data can be stored and passed between
+    Module API calls
+
+### `finish`
+
+This function gets executed after when genkeys.py terminates. It can be used to clean up
+the module specific data before it is stored in the dns api extra data yaml file.
+
+**Arguments**
+
+-   `module_specific_data`: An dict in which arbitrary data can be stored and passed between
+    Module API calls
+
 ### `add`
 
 Adds a new DomainKeys TXT record to a domain using a selector value (normally set based on
@@ -23,6 +43,8 @@ record it adds, allowing exact control over which record is accessed once it's c
 -   `dnsapi_data`: Information from `dnsapi.ini` for the domain.
 -   `dnsapi_domain_data`: Information from `domains.ini` for the domain.
 -   `key_data`: Data about the generated key created by `genkeys.py`.
+-   `module_specific_data`: An dict in which arbitrary data can be stored and passed between
+    Module API calls
 -   `debugging`: Normally omitted, defaults to False if omitted. If given as True, causes
     DNS modules to return before actually doing anything and may cause additional diagnostic
     output.
