@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 #    OpenDKIM genkeys tool
@@ -31,7 +31,7 @@ import sys
 import traceback
 import yaml
 
-class Genkeys():
+class Genkeys:
     """ This class contains all methods of the opendkim-genkeys program """
 
     VERSION = "2.0.0"
@@ -382,7 +382,7 @@ class Genkeys():
 
     def find_dns_api_modules(self):
         """Find all available DNS API modules (they're in the src directory)"""
-        # Go through all possible names (pulled from what"s mentioned in the
+        # Go through all possible names (pulled from what's mentioned in the
         # dnsapi.yml file) and for each one X see if we can load a module named
         # dnsapi_X (file will be dnsapi_X.py).
         dns_apis = {}
@@ -905,7 +905,7 @@ class Genkeys():
             key_table_contents = {}
 
 
-        # Check for our DNS API modules. If we don"t have any, there"s no sense in
+        # Check for our DNS API modules. If we don"t have any, there's no sense in
         # trying to do automatic updating even if we"re supposed to.
         self.dns_apis, should_update_dns_new = self.find_dns_api_modules()
         should_update_dns = should_update_dns and should_update_dns_new

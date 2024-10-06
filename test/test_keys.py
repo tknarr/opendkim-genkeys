@@ -1,6 +1,4 @@
 import os
-import pytest
-import subprocess
 import sys
 
 sys.path.append("%s/../src" % os.path.dirname(__file__))

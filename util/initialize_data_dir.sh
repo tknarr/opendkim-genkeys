@@ -18,12 +18,13 @@
 
 echo "Initializing the working directory..."
 
-cat /dev/null >dns_update_data.ini
+cat /dev/null >dns_update_data.yml
+cat /dev/null >dnsapi_extra.yml
 cat /dev/null >key.table
 cat /dev/null >signing.table
 
 echo ""
-echo "Be sure to edit dnsapi.ini and domains.ini to match your DNS providers."
+echo "Be sure to edit dnsapi.yml and domains.yml to match your DNS providers."
 echo ""
 
 exit 0
